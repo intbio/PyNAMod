@@ -8,3 +8,6 @@ You can see example jupyter notebooks in the Examples folder.
 
 Installation:
 Work in progress
+
+Example of 3600 nucleosome fiber:
+![](Examples/Resources/3600_nucl_fiber.png)
