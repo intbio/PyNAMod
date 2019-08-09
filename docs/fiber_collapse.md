@@ -19,7 +19,7 @@
         nucl.addRepresentation('spacefill', {
            "sele": ".O", "color": "red","radius":3});
         nucl.addRepresentation('spacefill', {
-           "sele": ".N", "color": "green",radius":0.5});
+           "sele": ".N", "color": "green","radius":0.5});
         NGL.autoLoad("Resources/collapse.xtc").then(function (frames) {
           nucl.addTrajectory(frames);
           var traj = nucl.trajList[0].trajectory;
