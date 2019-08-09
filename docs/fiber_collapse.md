@@ -1,4 +1,4 @@
-### Stochastic nucleosome fiber collapse
+### Стохастическое сворачивание нуклеосомной фибриллы
 [Назад](index.md)
 
 <html lang="en">
