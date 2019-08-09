@@ -1,4 +1,4 @@
-### Интерактивная визуализация пластичности тетрамера гистонов H3-H4
+### Stochastic nucleosome fiber collapse
 [Назад](index.md)
 
 <html lang="en">
