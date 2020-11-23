@@ -1,13 +1,19 @@
 import numpy as np
 import nglview as nv
-def show_ref_frames(bp_frames,view=None,spheres=True,arrows=False,diamonds=False,boxes=True):
+def show_ref_frames(bp_frames,view=None,spheres=True,arrows=False,diamonds=False,boxes=True,bp_colors_mask=None):
     if view is None:
         view=nv.NGLWidget()
-    dx=4
-    dy=2
+    dx=2
+    dy=4
     dz=1
     if spheres:
-        view.shape.add_buffer('sphere',position=bp_frames[:,3,:3].flatten().tolist(),color=[1,1,0]*bp_frames.shape[0],radius=[3]*bp_frames.shape[0])
+        if bp_colors_mask is None:
+            view.shape.add_buffer('sphere',position=bp_frames[:,3,:3].flatten().tolist(),color=[1,1,0]*bp_frames.shape[0],radius=[3]*bp_frames.shape[0])
+        else:
+            bp_colors=np.ones((bp_frames.shape[0],3))
+            bp_colors[bp_colors_mask,1]=0
+            bp_colors[bp_colors_mask!=1,2]=0
+            view.shape.add_buffer('sphere',position =bp_frames[:,3,:3].flatten().tolist(),color=bp_colors.flatten().tolist(),radius=[3]*bp_frames.shape[0])
         view.shape.add_buffer('cylinder',
                               position1=bp_frames[:,3,:3][:-1].flatten().tolist(),
                               position2=bp_frames[:,3,:3][1:].flatten().tolist(),

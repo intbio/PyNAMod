@@ -7,3 +7,6 @@ def get_rotation_and_offset_ref_frame_to_obj(ref_mat,ref_ori,obj_mat,obj_ori):
 
 def get_obj_orientation_and_location(ref_mat,ref_ori,rotation,offset):
     return(np.dot(ref_mat.T, rotation),np.dot(offset,ref_mat.T)+ref_ori)
+
+def get_obj_orientation(ref_mat,ref_ori,offset):
+    return(np.dot(offset,ref_mat.T)+ref_ori)

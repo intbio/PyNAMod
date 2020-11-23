@@ -3,6 +3,9 @@ import numpy as np
 #from prody import *
 #import cStringIO
 
+#'Shear','Stretch','Stagger','Buckle','Prop-Tw','Opening','Shift','Slide','Rise','Tilt','Roll','Twist'
+BDNA_step=np.array([-0.032,-0.096,0.088,0.030,-15.120,-1.880,0.000, 0.436,3.353,-0.000 , 1.702, 35.666])
+
 def get_matr(triangle):
             """
             creates 6x6 diagonal matrix from upper triangle given in array
@@ -76,7 +79,9 @@ def get_consts_olson_98():
             'GA':	np.array([	0.46,	0.70,	0.26,	3.8,	5.3,	4.4]),	    
             'GC':	np.array([	0.61,	0.56,	0.24,	3.9,	4.6,	4.7])}
     return AVERAGE,FORCE_CONST,DISP
-            
+
+def get_dye_data():
+    return np.load('../pynamod/dyes.npy')
 '''    cy3=parsePDBStream(cStringIO.StringIO("""CRYST1    0.000    0.000    0.000  90.00  90.00  90.00 P 1           1
 ATOM      1  C5'     X   1      68.700  78.038  79.112  0.00  0.00           C
 ATOM      2  C4'     X   1      69.511  79.046  78.321  0.00  0.00           C

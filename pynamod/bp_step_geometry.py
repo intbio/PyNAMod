@@ -179,14 +179,16 @@ def get_ori_and_mat_from_step(shift,slide,rise,tilt,roll,twist,R1_exp,o1_exp):
     o2_exp=o1_exp+np.dot(o2,R1_exp.T)
     return(o2_exp,R2_exp)
 
+#TODO change to rebuild_by_full_bp_step_frame_numba
 @jit
 def rebuild_by_full_par_frame_numba(full_par_frame):
     R1_exp=np.identity(3)
     o1_exp=np.array([0.0,0.0,0.0])
-    bp_frames=np.zeros((full_par_frame.shape[0],4,4))
+    length=full_par_frame.shape[0]
+    bp_frames=np.zeros((length,4,4))
     bp_frames[0,:3,:3]=R1_exp
     bp_frames[0,3,:3]=o1_exp
-    for i in range(1,full_par_frame.shape[0]):
+    for i in range(1,length):
         params=full_par_frame[i,6:12]
         bp_frames[i,3,:3],bp_frames[i,:3,:3]=get_ori_and_mat_from_step_opt(params[0],params[1],params[2],
                                                                            params[3],params[4],params[5],

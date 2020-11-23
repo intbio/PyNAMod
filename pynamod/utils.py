@@ -13,3 +13,5 @@ def get_movable_steps(movable_bp):
     for bp in movable_bp:
         movable_bpstep.append(range(*bp))
     return(np.hstack(movable_bpstep)-1)
+
+W_C_pair={'A':'T','G':'C','C':'G','T':'A'}
