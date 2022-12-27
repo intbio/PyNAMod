@@ -248,7 +248,8 @@ class Fiber_model(object):
         return(dna_beads,ncp_beads,misc_beads,cur_ref_frames)
     
     
-    def get_all_beads_on_fiber_no_rebuild(self,prev_ncp_beads,prev_misc_beads,prev_ref_frames,changed_step_frame,change_index, linker_bp_coarse_index_list=None,
+    def get_all_beads_on_fiber_no_rebuild(self,prev_ncp_beads,prev_misc_beads,prev_ref_frames,
+                                          changed_step_frame,change_index, linker_bp_coarse_index_list=None,
                                linker_mask=None, entities=None):
         cur_ref_frames,rot_mat,ref_ori0,ref_ori1=rotate_bp_frames(copy.deepcopy(prev_ref_frames),changed_step_frame,change_index)
         if linker_mask is None:
