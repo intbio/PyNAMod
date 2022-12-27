@@ -1,8 +1,7 @@
 import numpy as np
 from numba import jit
 
-from math import acos,atan2
-from math import sqrt
+from math import atan2
 from math import pi
 
 @jit
@@ -14,7 +13,7 @@ def rmat(axis, phi):
     c=np.cos(phi)
     s=np.sin(phi)
     return np.array([[   c+(1-c)*u1*u1, (1-c)*u1*u2-u3*s, (1-c)*u1*u3+u2*s],
-                     [(1-c)*u1*u2+u3*s,  (c+(1-c)*u2*u2),(1-c)*u2*u3-u1*s],
+                     [(1-c)*u1*u2+u3*s,  c+(1-c)*u2*u2,(1-c)*u2*u3-u1*s],
                      [(1-c)*u1*u3-u2*s, (1-c)*u2*u3+u1*s,   c+(1-c)*u3*u3]])
 
 @jit
@@ -29,7 +28,7 @@ def rmat_inmat(axis, phi,mat):
     mat[0,1]=(1-c)*u1*u2-u3*s
     mat[0,2]=(1-c)*u1*u3+u2*s
     mat[1,0]=(1-c)*u1*u2+u3*s
-    mat[1,1]=(c+(1-c)*u2*u2)
+    mat[1,1]=c+(1-c)*u2*u2
     mat[1,2]=(1-c)*u2*u3-u1*s
     mat[2,0]=(1-c)*u1*u3-u2*s
     mat[2,1]=(1-c)*u2*u3+u1*s
@@ -37,7 +36,7 @@ def rmat_inmat(axis, phi,mat):
 
 @jit
 def length(v):
-    return sqrt(v[0]**2+v[1]**2+v[2]**2)
+    return np.sqrt(v[0]**2+v[1]**2+v[2]**2)
 @jit
 def vec_dot_product(v,w):
     return v[0]*w[0]+v[1]*w[1]+v[2]*w[2]
@@ -69,18 +68,19 @@ def determinant(v,w):
 @jit
 def inner_angle(v,w):
     cosx=vec_dot_product(v,w)/(length(v)*length(w))
-    rad=acos(cosx) # in radians
+    rad=np.arccos(cosx) # in radians
     return rad 
 @jit
 def calc_phi(A):
     cosx=vec_dot_product(A,[0.,1.,0.])/(length(A)*length([0.,1.,0.]))
-    rad=acos(cosx)
+    rad=np.arccos(cosx)
     #inner=inner_angle(A,[0.,1.,0.])
-    det = determinant(A,[0.,1.,0.])
-    if det>0: 
-        return rad
-    else: 
+    ### phi_sign = vec_dot_product(cross_product(A,[0.,1.,0.]),[0.,0.,1])
+    phi_sign = A[0]
+    if phi_sign < 0:
         return -rad
+    else:
+        return rad
 @jit(nopython=True)
 def rmat_c(axis, phi):
     v_length=length(axis)

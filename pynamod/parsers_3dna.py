@@ -1,4 +1,5 @@
 import numpy as np
+from  numpy.lib.recfunctions import append_fields
 
 def parse_bp_par_file(file):
     """
@@ -19,6 +20,23 @@ def parse_bp_par_file(file):
     pairtypes=tuple(zip(*params[3:]))[0]
     par_frame=np.array(tuple(zip(*params[3:]))[1:]).transpose().astype(float)
     return(header,pairtypes,par_frame)
+
+def write_bp_par_file(pairtypes,frame,filename):
+    
+    """
+    this fuction writes analog of bp_step.par file from frame to filename.
+
+    """
+    header=f'''{len(pairtypes):4d} # base-pairs
+   0 # ***local base-pair & step parameters***
+#        Shear    Stretch   Stagger   Buckle   Prop-Tw   Opening     Shift     Slide     Rise      Tilt      Roll      Twist'''
+
+    a = np.rec.array(np.array(pairtypes), dtype=[('pair', '<U3')])
+    variables=['Shear', 'Stretch','Stagger','Buckle','Prop-Tw','Opening',  'Shift',  'Slide', 'Rise','Tilt','Roll','Twist']
+    for i,var in enumerate(variables):
+        a = append_fields(a, var, frame[:,i], usemask=False, dtypes=[np.float32])
+    fmt=['%-4s']+['%10.3f']*12
+    np.savetxt(filename,a,fmt=fmt,header=header,comments='',delimiter='')
 
 def ref_frames_to_array(fname):
     '''
