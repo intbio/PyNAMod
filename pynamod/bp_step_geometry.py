@@ -50,7 +50,13 @@ def get_params_for_single_step_debug(o1,o2,R1,R2):
     tilt=RollTilt*np.sin(phi)
     return(shift,slide,rise,np.rad2deg(tilt),np.rad2deg(roll),twist)
 
-def get_params_for_single_step_stock(o1,o2,R1,R2):
+def get_params_for_single_step_stock(o1,o2,R1,R2,pair_params=False):
+
+    if pair_params:
+        if vec_dot_product(R1[:,2],R2[:,2])<0:
+            R1 = R1.copy()
+            R1[:,1:] *= -1
+            
     z1=R1[:,2]
     z2=R2[:,2]
     hinge= np.cross(z1,z2)/np.linalg.norm(np.cross(z1,z2))
@@ -83,7 +89,7 @@ def get_params_for_single_step_stock(o1,o2,R1,R2):
 
     roll=RollTilt*np.cos(phi)
     tilt=RollTilt*np.sin(phi)
-    return shift,slide,rise,np.rad2deg(tilt),np.rad2deg(roll),np.rad2deg(twist)
+    return list((shift,slide,rise,np.rad2deg(tilt),np.rad2deg(roll),np.rad2deg(twist),om,Rm))
 
 @jit(nopython=True)
 def get_params_for_single_step_numba(o1,o2,R1,R2):
