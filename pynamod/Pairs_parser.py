@@ -66,7 +66,7 @@ Returns:
     corrected_df = pd.concat((corrected_df,strand_pairs))
     return pairs_df.reset_index(drop=True)
 #review
-with open('../pynamod/classifier.pkl','rb') as f:
+with open('/home/_shared/package_dev/PyNAMod/pynamod/classifier.pkl','rb') as f:
     classifier = pickle.load(f)
 def get_pairs(nucl_df,leading_strands=[]):
     '''

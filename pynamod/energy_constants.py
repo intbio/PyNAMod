@@ -81,7 +81,7 @@ def get_consts_olson_98():
     return AVERAGE,FORCE_CONST,DISP
 
 def get_dye_data():
-    return np.load('../pynamod/dyes.npy')
+    return np.load('/home/_shared/package_dev/PyNAMod/pynamod/dyes.npy')
 '''    cy3=parsePDBStream(cStringIO.StringIO("""CRYST1    0.000    0.000    0.000  90.00  90.00  90.00 P 1           1
 ATOM      1  C5'     X   1      68.700  78.038  79.112  0.00  0.00           C
 ATOM      2  C4'     X   1      69.511  79.046  78.321  0.00  0.00           C

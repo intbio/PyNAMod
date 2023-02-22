@@ -31,7 +31,7 @@ def _check_atom_name(node1,node2):
 
 base_graphs = {}
 for base in ['A','T','G','C','U']:
-    mda_str = mda.Universe(f'../pynamod/Base_structures/Atomic_{base}.pdb')
+    mda_str = mda.Universe(f'/home/_shared/package_dev/PyNAMod/pynamod/Base_structures/Atomic_{base}.pdb')
     mda_str.add_TopologyAttr('elements',[guess_atom_element(name) for name in mda_str.atoms.names])
     base_graphs[base] = build_graph(mda_str.select_atoms('not name ORI'))
 atoms_to_exclude = {'A':[5],'T':[2,5,8],'G':[5,8],'C':[2,5],'U':[]}
