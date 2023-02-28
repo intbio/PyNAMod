@@ -202,27 +202,29 @@ def get_ori_and_mat_from_step(shift,slide,rise,tilt,roll,twist,R1_exp,o1_exp):
     o2_exp=o1_exp+np.dot(o2,R1_exp.T)
     return(o2_exp,R2_exp)
 
+
 def rotate_origins(origins,rotation_matrix,ref_ori1,ref_ori2):
     moved_origins = origins - ref_ori1
     return np.matmul(moved_origins,rotation_matrix.T) + ref_ori2
 
+
 def rotate_bp_frames(bp_frames,changed_step_frame,change_index):
+    bp_frames = bp_frames.copy()
     changed_bp_frame = np.zeros((4,4))
     changed_bp_frame[3,:3],changed_bp_frame[:3,:3] = get_ori_and_mat_from_step(*changed_step_frame[6:],
                                                 bp_frames[change_index-1,:3,:3],
                                                 bp_frames[change_index-1,3,:3])
     
-    
-    if change_index == len(bp_frames) - 1:
-        bp_frames[change_index] = changed_bp_frame
-        return bp_frames
     rotation_matrix = np.matmul(changed_bp_frame[:3,:3],bp_frames[change_index,:3,:3].T)
-    bp_frames[change_index+1:,:3,:3] = np.matmul(rotation_matrix,bp_frames[change_index+1:,:3,:3])
-    #bp_frames[change_index+1:,3,:3] = np.matmul(bp_frames[change_index+1:,3,:3]-bp_frames[change_index,3,:3],rotation_matrix.T) + changed_bp_frame[3,:3]
-    bp_frames[change_index+1:,3,:3] = rotate_origins(bp_frames[change_index+1:,3,:3],rotation_matrix,
-                                                     bp_frames[change_index,3,:3],changed_bp_frame[3,:3])
     bp_frames[change_index] = changed_bp_frame
-    return bp_frames,rotation_matrix,bp_frames[change_index,3,:3],changed_bp_frame[3,:3]
+    if change_index == len(bp_frames) - 1:
+        return (bp_frames,rotation_matrix,bp_frames[change_index,3,:3],changed_bp_frame[3,:3])
+    
+    bp_frames[change_index+1:,:3,:3] = np.matmul(rotation_matrix,bp_frames[change_index+1:,:3,:3])
+    bp_frames[change_index+1:,3,:3] = np.matmul(bp_frames[change_index+1:,3,:3]-bp_frames[change_index,3,:3],rotation_matrix.T) + changed_bp_frame[3,:3]
+    #bp_frames[change_index+1:,3,:3] = rotate_origins(bp_frames[change_index+1:,3,:3],rotation_matrix,
+     #                                                bp_frames[change_index,3,:3],changed_bp_frame[3,:3])
+    return(bp_frames,rotation_matrix,bp_frames[change_index,3,:3],changed_bp_frame[3,:3])
 
 
 #TODO change to rebuild_by_full_bp_step_frame_numba

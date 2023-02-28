@@ -5,7 +5,7 @@ from pynucl.seq_utils import residues_3to1
 from pynamod.energy_constants import * 
 from pynamod.visual_ngl import show_ref_frames
 from pynamod.non_DNA_geometry import get_obj_orientation_and_location,get_rotation_and_offset_ref_frame_to_obj
-from pynamod.bp_step_geometry import rebuild_by_full_par_frame_numba,rotate_bp_frames,get_ori_and_mat_from_step,rotate_origins
+from pynamod.bp_step_geometry import rebuild_by_full_par_frame,rotate_bp_frames,get_ori_and_mat_from_step,rotate_origins
 from pynamod.energy_funcs import *
 from pynamod.energy_funcs import _calc_bend_energy
 from pynamod.utils import get_movable_steps
@@ -216,7 +216,7 @@ class Fiber_model(object):
     
     def get_all_beads_on_fiber(self,bp_step_frame, linker_bp_coarse_index_list=None,
                                linker_mask=None, entities=None):
-        cur_ref_frames=rebuild_by_full_par_frame_numba(bp_step_frame)
+        cur_ref_frames=rebuild_by_full_par_frame(bp_step_frame)
         if linker_mask is None:
             linker_mask = self.linker_mask
         if entities is None:
@@ -262,10 +262,10 @@ class Fiber_model(object):
         dna_beads=cur_ref_frames[linker_bp_coarse_index_list,3,:3]
         
         ### NCP BEADS ###
-        ncp_beads= rotate_origins(prev_ncp_beads,rot_mat,ref_ori0,ref_ori1)
+        ncp_beads= rotate_origins(prev_ncp_beads.copy(),rot_mat,ref_ori0,ref_ori1)
          ### MISC BEADS ###
         if len(entities['misc'])!=0:
-            misc_beads=rotate_origins(prev_ncp_beads,rot_mat,ref_ori0,ref_ori1)
+            misc_beads=rotate_origins(prev_misc_beads.copy(),rot_mat,ref_ori0,ref_ori1)
         else:
             misc_beads=None
         return(dna_beads,ncp_beads,misc_beads,cur_ref_frames)
@@ -315,8 +315,7 @@ class Fiber_model(object):
     def start_mc_by_linker_new(self,bending=True,excluded=True,
                    electrostatic=False,dist_pairs=True,energy_dict={},
                            KT=1,sigma_transl=1,sigma_rot=1,
-                           max_trials_per_linker=10,n_macrocycles=1,
-                           single_step_var=False,
+                           target_accepted_steps=200,max_steps=10000,
                            mute=False,save_every=1,save_beads=False,ncp_remodel_dict=None,rebuild_index = 50):
         '''
         TODO 
@@ -376,44 +375,47 @@ class Fiber_model(object):
         if not(dist_pairs):
             force_params['pair_indexes']=None
         
-        linker_bp_index_list = np.hstack(linker_bp_index_list).reshape(-1,1)
+        linker_bp_index_list = np.hstack(linker_bp_index_list)
+        linker_bp_index_list = linker_bp_index_list[linker_bp_index_list > self.entities['NCP'][0]['loc']]
+        linker_bp_index_list = linker_bp_index_list[linker_bp_index_list < self.entities['NCP'][len(self.entities['NCP'])-1]['loc']]
+        
         current_frame = self.bp_step_frame.copy()
         prev_e = np.finfo(float).max
         frames = []
         energies = []
         real_space = []
-        macro_pbar = tqdm(np.arange(n_macrocycles),desc='Macro cycles')
+        total_step_bar = tqdm(total=max_steps,desc='Steps')
         #linker_pbar = tqdm(total=len(linker_bp_index_list),desc='Linker cycles',disable=mute)
         info_pbar=  tqdm(total=100,bar_format='{l_bar}{bar}{postfix}',desc='Acceptance rate',disable=mute)
         total_step=0
         accepted_steps=0
         last_accepted=0
-        ncp_moves =0
-        ncp_movefails =0
-        current_move_try = 0
-        start_KT = copy.deepcopy(KT)
+        
         
         try:
-            for i in macro_pbar:
+            while total_step < max_steps and accepted_steps < target_accepted_steps:
                 # resetting the generator
                 np.random.seed()
 
 
 
 
-                for j,linker_bp_indexes in enumerate(linker_bp_index_list):
+                for linker_bp_index in linker_bp_index_list:
                     #linker_pbar.update(j+1-linker_pbar.n)
                     temp_frame=current_frame.copy()
-                    temp_frame[linker_bp_indexes,6:]+=np.random.normal(scale=scale,size=[len(linker_bp_indexes),6])
+                    temp_frame[linker_bp_index,6:]+=np.random.normal(scale=scale,size=[6])
                     sub_frame=get_bpstep_frame(temp_frame,movable_steps)
                     bend_e=_calc_bend_energy(sub_frame,force_matrix,average_bpstep_frame)
 
                     if accepted_steps%rebuild_index == 0:
-                        dna_beads,ncp_beads,misc_beads,cur_ref_frames = self.get_all_beads_on_fiber(temp_frame[0],
+                        dna_beads,ncp_beads,misc_beads,cur_ref_frames = self.get_all_beads_on_fiber(temp_frame,
                                                                                  linker_bp_coarse_index_list)
                     else:
                         dna_beads,ncp_beads,misc_beads,cur_ref_frames = self.get_all_beads_on_fiber_no_rebuild(ncp_beads,misc_beads,prev_ref_frames,
-                                                         temp_frame[linker_bp_indexes],linker_bp_indexes[0], linker_bp_coarse_index_list)
+                                                         temp_frame[linker_bp_index],linker_bp_index,linker_bp_coarse_index_list)
+                        dna_beads1,ncp_beads1,misc_beads1,cur_ref_frames1 = self.get_all_beads_on_fiber(temp_frame,
+                                                                             linker_bp_coarse_index_list)
+                        print(np.average(np.linalg.norm(cur_ref_frames[:,3,:3]-cur_ref_frames1[:,3,:3])),linker_bp_index)
 
                     if misc_beads is None:
                         all_beads=np.vstack((dna_beads,ncp_beads))
@@ -425,6 +427,7 @@ class Fiber_model(object):
 
                     r = np.random.uniform(0,1)
                     total_step+=1
+                    total_step_bar.update(1)
                     if Del_E < 0 or (not(np.isinf(np.exp(Del_E))) and (r  <= np.exp(-Del_E/KT))):
                         prev_e=total_e
                         accepted_steps+=1
@@ -434,19 +437,21 @@ class Fiber_model(object):
                         if (accepted_steps% save_every) == 0:
                             frames.append(current_frame)
                             components['bend']=bend_e
-                            components['macro_cycle']=i
                             components['entities']=copy.deepcopy(self.entities)
                             components['linker_mask']=copy.deepcopy(np.sort(np.hstack(linker_bp_index_list)))
                             energies.append(components)
                             if save_beads:
                                 real_space.append({'dna':dna_beads,'ncp':ncp_beads,'misc':misc_beads})
-                        info_pbar.set_postfix(E=f'{prev_e:.2f}, Acc.st {len(energies)}, Acc.m {ncp_moves-ncp_movefails}, failed.m {ncp_movefails}')
-                        info_pbar.set_description(f'Acceptance rate %')
-                        acceptance_rate=100*accepted_steps/total_step
-                        info_pbar.update(acceptance_rate-info_pbar.n)
+                    info_pbar.set_postfix(E=f'{prev_e:.2f}, Acc.st {accepted_steps}')
+                    info_pbar.set_description(f'Acceptance rate %')
+                    acceptance_rate=100*accepted_steps/total_step
+                    info_pbar.update(acceptance_rate-info_pbar.n)
+                    
         
         except KeyboardInterrupt:
             print('interrupted!')
+        if accepted_steps >= target_accepted_steps:
+            print('target accepted steps reached')
         print('accepted_steps',accepted_steps)
         return(frames,energies)
     
@@ -512,6 +517,7 @@ class Fiber_model(object):
         
         if single_step_var:
             linker_bp_index_list=np.hstack(linker_bp_index_list).reshape(-1,1)
+            linker_bp_index_list = linker_bp_index_list[linker_bp_index_list[:,0] != 0]
         start_linker_bp_index_list = linker_bp_index_list.copy()
 
         current_frame=self.bp_step_frame.copy()
@@ -577,15 +583,16 @@ class Fiber_model(object):
                                 components['bend']=bend_e
                                 components['macro_cycle']=i
                                 components['entities']=copy.deepcopy(self.entities)
+                                
                                 components['linker_mask']=copy.deepcopy(np.sort(linker_bp_index_list))
                                 energies.append(components)
                                 if save_beads:
                                     real_space.append({'dna':dna_beads,'ncp':ncp_beads,'misc':misc_beads})
-                            info_pbar.set_postfix(E=f'{prev_e:.2f}, Acc.st {len(energies)}, Acc.m {ncp_moves-ncp_movefails}, failed.m {ncp_movefails}')
-                            info_pbar.set_description(f'Acceptance rate %')
-                            acceptance_rate=100*accepted_steps/total_step
-                            info_pbar.update(acceptance_rate-info_pbar.n)
                             break
+                        info_pbar.set_postfix(E=f'{prev_e:.2f}, Acc.st {len(energies)}, Acc.m {ncp_moves-ncp_movefails}, failed.m {ncp_movefails}')
+                        info_pbar.set_description(f'Acceptance rate %')
+                        acceptance_rate=100*accepted_steps/total_step
+                        info_pbar.update(acceptance_rate-info_pbar.n)
         
         except KeyboardInterrupt:
             print('interrupted!')
