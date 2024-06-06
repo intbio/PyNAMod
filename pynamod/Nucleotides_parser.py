@@ -3,7 +3,7 @@ from MDAnalysis.topology.guessers import guess_atom_element
 import MDAnalysis as mda
 import numpy as np
 from scipy.spatial.distance import cdist
-from itertools import pairwise
+from more_itertools import pairwise
 
 
 class Nucleotide:

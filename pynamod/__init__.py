@@ -1,1 +1,2 @@
-from pynamod.mol_structure_analysis import DNA_structure
+from pynamod.DNA_structure_analysis import DNA_structure_from_atomic,DNA_structure_generated
+from pynamod.Protein_structure_analysis import Protein
