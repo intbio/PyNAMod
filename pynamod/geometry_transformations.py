@@ -72,7 +72,7 @@ def inner_angle(v,w):
     return rad 
 @jit
 def calc_phi(A):
-    cosx=vec_dot_product(A,[0.,1.,0.])/(length(A)*length([0.,1.,0.]))
+    cosx=vec_dot_product(A,[0.,1.,0.])/length(A)
     rad=np.arccos(cosx)
     #inner=inner_angle(A,[0.,1.,0.])
     ### phi_sign = vec_dot_product(cross_product(A,[0.,1.,0.]),[0.,0.,1])

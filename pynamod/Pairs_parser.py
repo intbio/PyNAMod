@@ -3,20 +3,23 @@ import pickle
 from itertools import combinations
 from more_itertools import pairwise
 from scipy.spatial.transform import Rotation as R
-from pynamod.bp_step_geometry import get_params_for_single_step_stock
+from pynamod.bp_step_geometry import get_params_for_single_step_stock,get_ori_and_mat_from_step_opt,rebuild_by_full_par_frame_numba
 
 with open('pynamod/classifier.pkl', 'rb') as f:
     classifier = pickle.load(f)
 
 
 class Base_pair:
-    def __init__(self, lead_nucl, lag_nucl,DNA_structure):
+    def __init__(self, lead_nucl, lag_nucl,DNA_structure,radius=2,charge=-2,eps=0.5):
         if lag_nucl.in_leading_strand:
             lead_nucl, lag_nucl = lag_nucl, lead_nucl
 
         self.lead_nucl = lead_nucl
         self.lag_nucl = lag_nucl
         self.DNA_structure = DNA_structure
+        self.radius = radius
+        self.charge = charge
+        self.eps = eps
 
         self.pair_name = ''.join(sorted((lead_nucl.restype, lag_nucl.restype))).upper()
 
@@ -66,10 +69,23 @@ class Base_pair:
     
     def set_params(self,value,slices,attr):
         getattr(self.DNA_structure,attr)[self.get_index()][slices] = value
+    
+    def set_step_params(self,value,slices,attr):
+        self.set_params(value,slices=slices,attr=attr)
+        index = self.get_index() - 1
+        
+        self.DNA_structure.base_ref_frames[index:] = rebuild_by_full_par_frame_numba(self.DNA_structure.steps_params[index:],
+                                                                            self.DNA_structure.base_ref_frames[index])
         
     def set_property(slices,attr):
         getter = lambda self: self.get_params(slices=slices,attr=attr)
-        setter = lambda self,value: self.set_params(value,slices=slices,attr=attr)
+        
+        if attr == 'steps_params':
+            setter = lambda self,value: self.set_step_params(value,slices=slices,attr=attr)
+            
+        else:
+            setter = lambda self,value: self.set_params(value,slices=slices,attr=attr)
+            
         return property(getter,setter)
     
     pair_params = set_property(np.s_[:],'pairs_params')

@@ -1,0 +1,26 @@
+name: pynamod-env
+
+channels:
+  - pytorch
+  - defaults
+  - conda-forge
+  - nvidia
+    
+
+dependencies:
+  - python=3.11.9
+  - ipykernel
+  - mdanalysis
+  - pypdb
+  - numba
+  - nglview=3.0.3
+  - pytorch
+  - pytorch-cuda=12.1
+  - torchvision
+  - torchaudio
+  - seaborn
+  - more-itertools
+  - pytest
+  - ipywidgets=7.7.2
+  - pip:
+    - pdb2pqr

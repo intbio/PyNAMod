@@ -7,7 +7,7 @@ import pypdb
 from sklearn.neighbors import KNeighborsClassifier
 
 class Protein:
-    def __init__(self,mdaUniverse,n_cg_beads=50,ref_pair = None):
+    def __init__(self,mdaUniverse,n_cg_beads=50,ref_pair = None,eps=1):
         self.n_cg_beads = n_cg_beads
         
         pdb_temp = tempfile.NamedTemporaryFile(suffix='.pdb')
@@ -18,6 +18,7 @@ class Protein:
 
         self.ref_vectors = np.zeros((n_cg_beads,3))
         self.ref_pair = ref_pair
+        self.eps = np.tile(eps,n_cg_beads)
     
     def get_cg_centers(self):
         steps = 200*self.n_cg_beads
@@ -48,7 +49,7 @@ class Protein:
         ref_om = self.ref_pair.om
         ref_Rm = self.ref_pair.Rm
         self.ref_vectors = np.matmul((self.cg_beads_pos - ref_om),ref_Rm)
-        print(self.ref_vectors)
+
             
     def get_cg_params(self):
         classifier = KNeighborsClassifier(1)
