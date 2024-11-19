@@ -1,5 +1,6 @@
 import MDAnalysis as mda
 import numpy as np
+import torch
 import io
 import subprocess
 import tempfile
@@ -18,18 +19,31 @@ class Protein:
 
         self.ref_vectors = np.zeros((n_cg_beads,3))
         self.ref_pair = ref_pair
-        self.eps = np.tile(eps,n_cg_beads)
+        self.eps = torch.ones(n_cg_beads)*eps
+        
     
-    def get_cg_centers(self):
+    def build_cg_model(self):
+        self._get_cg_centers()
+        self._get_cg_params()
+        
+    def get_true_pos(self,dna_structure):
+        ref_om = dna_structure.origins[self.ref_pair.get_index(dna_structure)]
+        ref_Rm = dna_structure.ref_frames[self.ref_pair.get_index(dna_structure)]
+        return torch.matmul(self.ref_vectors.reshape(-1,1,3),ref_Rm.T) + ref_om
+    
+    def copy(self):
+        
+    
+    def _get_cg_centers(self):
         steps = 200*self.n_cg_beads
         
         non_H_atoms = self.u.select_atoms('not type H')
         max_coord = np.max(non_H_atoms.positions,axis=0)
         min_coord = np.min(non_H_atoms.positions,axis=0)
-        self.cg_beads_pos = [np.random.uniform(min_v-10,max_v+10,(self.n_cg_beads,1)) 
+        self.origins = [np.random.uniform(min_v-10,max_v+10,(self.n_cg_beads,1)) 
                      for min_v,max_v in zip(min_coord,max_coord)]
 
-        self.cg_beads_pos = np.hstack(self.cg_beads_pos)
+        self.origins = np.hstack(self.origins)
 
         lmbd_0,eps_0 = 0.2*self.n_cg_beads,0.3
         lmbd_s,eps_s = 0.01,0.05
@@ -38,40 +52,38 @@ class Protein:
         for step in range(1,steps+1):
             rand = np.random.randint(0,atoms_number)
             ref_atom_r = non_H_atoms[rand].position
-            dist = np.linalg.norm(ref_atom_r - self.cg_beads_pos,axis=1)
+            dist = np.linalg.norm(ref_atom_r - self.origins,axis=1)
             k_beads = np.zeros(dist.shape)
             k_beads[np.argsort(dist)] = np.arange(self.n_cg_beads)
 
             lmbd = lmbd_0 * (lmbd_s/lmbd_0) ** (step/steps)
             eps = eps_0 * (eps_s/eps_0) ** (step/steps)
 
-            self.cg_beads_pos = self.cg_beads_pos + eps * np.exp(-k_beads/lmbd).reshape(-1,1) * (ref_atom_r - self.cg_beads_pos)
+            self.origins = self.origins + eps * np.exp(-k_beads/lmbd).reshape(-1,1) * (ref_atom_r - self.origins)
+        
+        self.origins = torch.from_numpy(self.origins)
         ref_om = self.ref_pair.om
         ref_Rm = self.ref_pair.Rm
-        self.ref_vectors = np.matmul((self.cg_beads_pos - ref_om),ref_Rm)
+        self.ref_vectors = torch.matmul((self.origins - ref_om).reshape(-1,1,3),ref_Rm)
 
             
-    def get_cg_params(self):
+    def _get_cg_params(self):
         classifier = KNeighborsClassifier(1)
-        classifier.fit(self.cg_beads_pos,range(self.n_cg_beads))
+        classifier.fit(self.origins,range(self.n_cg_beads))
         groups = classifier.predict(self.u.atoms.positions)
         radii = np.zeros(self.n_cg_beads)
-        self.cg_charges = np.zeros(self.n_cg_beads)
-        self.cg_masses = np.zeros(self.n_cg_beads)
+        self.charges = np.zeros(self.n_cg_beads)
+        self.masses = np.zeros(self.n_cg_beads)
         for i in range(self.n_cg_beads):
             sel = self.u.atoms[groups==i]
             radii[i] = sel.radius_of_gyration()
-            self.cg_charges[i] = np.sum(sel.charges)
-            self.cg_masses[i] = np.sum(sel.masses)
+            self.charges[i] = np.sum(sel.charges)
+            self.masses[i] = np.sum(sel.masses)
 
-        self.cg_radii = radii + 1
-   
-    
-    def build_cg_model(self):
-        self.get_cg_centers()
-        self.get_cg_params()
+        self.radii = torch.from_numpy(radii + 1)
         
-    def get_true_pos(self):
-        ref_om = self.ref_pair.om
-        ref_Rm = self.ref_pair.Rm
-        return np.matmul(self.ref_vectors,ref_Rm.T) + ref_om
+        self.charges = torch.from_numpy(self.charges)
+        self.masses  = torch.from_numpy(self.masses)
+   
+
+    

@@ -1,4 +1,4 @@
-name: pynamod-env
+name: pynamod
 
 channels:
   - pytorch

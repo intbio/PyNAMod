@@ -1,15 +1,16 @@
-from pynamod.DNA_structure import DNA_structure
-from pynamod.Nucleotides_parser import get_all_nucleotides, Nucleotide
-from pynamod.Pairs_parser import get_pairs, get_pairs_and_step_params, Base_pair
+from pynamod.DNA.DNA_structure import DNA_Structure
+from pynamod.atomic_analysis.nucleotides_parser import get_all_nucleotides, Nucleotide
+from pynamod.atomic_analysis.pairs_parser import get_pairs, Base_Pair
+from pynamod.geometry.bp_step_geometry import Geometrical_Parameters
 
 import MDAnalysis as mda
 from MDAnalysis.topology.guessers import guess_atom_element
 import io
 import pypdb
-import numpy as np
+import torch
 
 
-class DNA_Structure_from_Atomic(DNA_structure):
+class DNA_Structure_from_Atomic(DNA_Structure):
     def __init__(self,mdaUniverse=None,file=None,pdb_id=None,leading_strands=[],proteins=[]):
         super().__init__(proteins=proteins)
         if mdaUniverse:
@@ -48,16 +49,18 @@ class DNA_Structure_from_Atomic(DNA_structure):
     returns:
         params_df - pandas DataFrame with calculated intra and inter geometrical parameters and resid, segid and nucleotide type of each nucleotides in pair.
         '''
-
         self.nucleotides = get_all_nucleotides(self)
 
         if pairs_in_structure == []:
-            get_pairs(self)
+            self.pairs_list = get_pairs(self.nucleotides)
         else:
             self.pairs_list = self.parse_pairs(pairs_in_structure)
             
-        self.pairs_params = np.zeros((len(self.pairs_list),6))
-        self.steps_params = np.zeros((len(self.pairs_list),6))
-        self.base_ref_frames = np.zeros((len(self.pairs_list),4,4))
-        self.set_pair_params_list()
-        get_pairs_and_step_params(self) 
+        ref_frames = torch.stack([pair.Rm for pair in self.pairs_list])
+        
+        origins = torch.vstack([pair.om for pair in self.pairs_list]).reshape(-1,1,3)
+        
+        self.geom_params = Geometrical_Parameters(ref_frames=ref_frames,origins=origins)
+        self._set_pair_params_list()
+        
+    

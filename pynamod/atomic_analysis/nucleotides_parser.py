@@ -4,7 +4,9 @@ import MDAnalysis as mda
 import numpy as np
 from scipy.spatial.distance import cdist
 from more_itertools import pairwise
+import io
 
+from pynamod.atomic_analysis.base_structures import *
 
 class Nucleotide:
     def __init__(self, restype, resid, segid, in_leading_strand):
@@ -86,7 +88,7 @@ def _check_atom_name(node1, node2):
 
 base_graphs = {}
 for base in ['A', 'T', 'G', 'C', 'U']:
-    mda_str = mda.Universe(f'pynamod/Base_structures/Atomic_{base}.pdb')
+    mda_str = mda.Universe(io.StringIO(nucleotides_pdb[base]), format='PDB')
     mda_str.add_TopologyAttr('elements', [guess_atom_element(name) for name in mda_str.atoms.names])
     base_graphs[base] = build_graph(mda_str.select_atoms('not name ORI'))
 atoms_to_exclude = {'A': [5], 'T': [2, 5, 8], 'G': [5, 8], 'C': [2, 5], 'U': []}
@@ -130,7 +132,7 @@ def check_if_nucleotide(residue, base_graphs=base_graphs):
     return exp_sel, stand_sel, true_base
 
 
-def get_all_nucleotides(DNA_structure):
+def get_all_nucleotides(DNA_Structure):
     '''
     Create data frame with data about nucleotides from a given pdb.
     -----
@@ -142,14 +144,14 @@ def get_all_nucleotides(DNA_structure):
     '''
     nucleotides = []
 
-    sel = DNA_structure.u.select_atoms('(type C or type O or type N) and not protein')
+    sel = DNA_Structure.u.select_atoms('(type C or type O or type N) and not protein')
     sel = sel[sel.altLocs == '']
     for res_numb, residue in enumerate(sel.residues):
         residue_str = residue.atoms
         if 10 < len(residue_str) < 40:  # FIXME
             exp_sel, stand_sel, base = check_if_nucleotide(residue_str)
             if base != '':
-                in_leading_strands = residue.segid in DNA_structure.leading_strands
+                in_leading_strands = residue.segid in DNA_Structure.leading_strands
                 nucl = Nucleotide(base, residue.resid, residue.segid, in_leading_strands)
                 nucl.get_base_ref_frame(sum(exp_sel), sum(stand_sel))
                 nucleotides.append(nucl)
