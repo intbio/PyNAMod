@@ -1,50 +1,88 @@
 import torch
 
+from pynamod.geometry.traj_handler import Traj_Handler
 
-class Geometrical_Parameters:
-    def __init__(self,local_params = None, ref_frames = None, origins = None,pair_params=False,auto_rebuild=True):
+
+class Geometrical_Parameters(Traj_Handler):
+    def __init__(self,local_params = None, ref_frames = None, origins = None,pair_params=False,auto_rebuild=True,traj_len=None,cur_step_cls = None):
 
         self.pair_params = pair_params
-                
+        
+        self._auto_rebuild_sw = self.auto_rebuild = auto_rebuild
+        
+        if not traj_len:
+            traj_len = 1
+        if not cur_step_cls:
+            self._cur_tr_step = 0
+            cur_step_cls = ''
+        
+        local_params_shape = None
+        if local_params is not None:
+            self.dtype = local_params.dtype
+            self.len = local_params.shape[0]
+            local_params_shape = (traj_len,*local_params.shape)
+        if origins is not None:
+            self.dtype = origins.dtype
+            self.len = origins.shape[0]
+            origins = origins.reshape(-1,1,3)
+            origins_shape = (traj_len,*origins.shape)
+        elif self.len:
+            origins_shape = (traj_len,self.len,1,3)
+            
+        if ref_frames is not None:
+            ref_frames_shape = (traj_len,*ref_frames.shape)
+        elif self.len:
+            ref_frames_shape = (traj_len,self.len,3,3)
+            
+        if not local_params_shape:
+            local_params_shape = (traj_len,self.len,6)
+            
+        
+        
+    
+        super().__init__(self.dtype,[ref_frames_shape,origins_shape,local_params_shape],
+                         ('ref_frames','origins','local_params'),cur_step_cls)
+        
+        self.get_new_params_set(local_params, ref_frames, origins)
+        
+    
+    
+    def get_new_params_set(self,local_params = None, ref_frames = None, origins = None):
         init_from_local_params = local_params is not None
         init_from_r_and_o = ref_frames is not None and origins is not None
         
-        self._auto_rebuild_sw = False
-        self.auto_rebuild = auto_rebuild
-        
-                
+        self._auto_rebuild_sw = False    
         if init_from_r_and_o and init_from_local_params:     
             if not origins.dtype == ref_frames.dtype == local_params.dtype:
                 raise TypeError("Dtypes don't match")
-            self.ref_frames = ref_frames
-            self.origins = origins
-            self.local_params = local_params    
-            self.dtype = origins.dtype
+            for attr in ('ref_frames','origins','local_params'):
+                tens = locals()[attr]
+                if tens.shape == getattr(self,f'_{attr}_traj').shape:
+                    setattr(self,f'_{attr}_traj',tens)
+                else:
+                    setattr(self,attr,tens)
+
         elif init_from_r_and_o:
             if origins.dtype != ref_frames.dtype:
                 raise TypeError("Origins and reference frames dtypes don't match")
             
             self.ref_frames = ref_frames
-            self.origins = origins
-
-            self.dtype = origins.dtype
-            self.len = origins.shape[0]
+            self.origins = origins    
             self.local_params = torch.zeros(self.len,6,dtype=self.dtype)
             self.rebuild('rebuild_local_params')
             
         elif init_from_local_params:
             self.local_params = local_params
-            self.dtype = local_params.dtype
-            self.len = local_params.shape[0]
             self.ref_frames = torch.zeros((self.len,3,3),dtype=self.dtype)
-            self.origins = torch.zeros((self.len,3),dtype=self.dtype)
+            self.origins = torch.zeros((self.len,1,3),dtype=self.dtype)
             self.rebuild('rebuild_ref_frames_and_ori')
         
         else:
             raise TypeError('Geometrical_parameters should be initialized with local parameters or reference frames and origins')
        
-        self._auto_rebuild_sw = auto_rebuild
-
+        self._auto_rebuild_sw = self.auto_rebuild
+        return self
+        
     def copy(self):
         return Geometrical_Parameters(local_params = self.local_params.clone(), ref_frames = self.ref_frames.clone(),
                                       origins = self.origins.clone(),pair_params=self.pair_params)
@@ -60,7 +98,7 @@ class Geometrical_Parameters:
     def rebuild_ref_frames_and_ori(self,start_index = 0, stop_index = None, start_ref_frame = None,start_origin = None):
         
         if stop_index is None:
-            stop_index = self.len
+            stop_index = self.origins.shape[0]
 
         
         dist_params = self.local_params[start_index + 1:stop_index,:3]
@@ -89,9 +127,9 @@ class Geometrical_Parameters:
         
         for i,r in enumerate(r2):
             self.ref_frames[start_index+i+1] = torch.mm(self.ref_frames[start_index+i],r)
+        
 
-
-        self.origins[start_index+1:stop_index] = torch.cumsum(torch.matmul(o2,torch.transpose(self.ref_frames[start_index:stop_index-1],2,1)),axis=0)
+        self.origins[start_index+1:stop_index] = torch.cumsum(torch.matmul(o2,torch.transpose(self.ref_frames[start_index:stop_index-1],2,1)),dim=0).reshape(-1,1,3)
         
         
     
@@ -151,6 +189,8 @@ class Geometrical_Parameters:
                                                         self.origins[change_index],changed_ori)
         self.origins[change_index] = changed_ori
 
+    def traj_len(self):
+        return self._local_params_traj.shape[0]
 
     def __rotate_R(self,R_frames,rot_matrix):
         R_frames = rot_matrix.reshape(1,3,3).matmul(R_frames)
@@ -204,33 +244,42 @@ class Geometrical_Parameters:
     
     
     def __getitem__(self,sl):
+        neg_step = False
         if isinstance(sl,slice):
             if sl.step is not None:
                 if sl.step < 0:
-                    self._auto_rebuild_sw = False
-                    self.origins = self.origins[::-1]
-                    self._auto_rebuild_sw = self.auto_rebuild
-                    self.ref_frames = self.ref_frames[::-1]
                     sl = slice(sl.start,sl.stop,-1*sl.step)
-        return Geometrical_Parameters(local_params = self.local_params[sl], ref_frames = self.ref_frames[sl],
+                    neg_step = True
+        it = Geometrical_Parameters(ref_frames = self.ref_frames[sl],
                                       origins = self.origins[sl],pair_params=self.pair_params)
+        if neg_step:
+            it._auto_rebuild_sw = False
+            it.origins = it.origins.flip(dims=(0,))
+            it._auto_rebuild_sw = it.auto_rebuild
+            it.ref_frames = it.ref_frames.flip(dims=(0,))
+            it.local_params *= -1
+        
+        return it
+        
+        
+        
     
-    
-    def __getter(self,attr):
-        return getattr(self,attr)
     
     def __setter(self,value,attr,rebuild_func_name):
-        setattr(self,attr,mod_Tensor(value,self))
+        self.setter_from_tr(mod_Tensor(value,self),attr)
         if self._auto_rebuild_sw:
             self.rebuild(rebuild_func_name)
 
         
-    local_params = property(fget=lambda self: self.__getter(attr = '_local_params'),
-                            fset=lambda self,value: self.__setter(value,attr = '_local_params',rebuild_func_name='rebuild_ref_frames_and_ori'))
-    ref_frames = property(fget=lambda self: self.__getter(attr = '_ref_frames'),
-                          fset=lambda self,value: self.__setter(value,attr = '_ref_frames',rebuild_func_name='rebuild_local_params'))
-    origins = property(fget=lambda self: self.__getter(attr = '_origins'),
-                       fset=lambda self,value: self.__setter(value,attr = '_origins',rebuild_func_name='rebuild_local_params'))
+    local_params = Traj_Handler.get_property_from_tr('local_params',
+                                                     fset=lambda self,value: self.__setter(value,attr = 'local_params',
+                                                                        rebuild_func_name='rebuild_ref_frames_and_ori'))
+    ref_frames = Traj_Handler.get_property_from_tr('ref_frames',
+                                                     fset=lambda self,value: self.__setter(value,attr = 'ref_frames',
+                                                                        rebuild_func_name='rebuild_local_params'))
+    origins = Traj_Handler.get_property_from_tr('origins',
+                                                     fset=lambda self,value: self.__setter(value.reshape(-1,1,3),attr = 'origins',
+                                                                        rebuild_func_name='rebuild_local_params'))
     
 
 class mod_Tensor(torch.Tensor):

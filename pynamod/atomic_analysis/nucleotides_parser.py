@@ -2,14 +2,16 @@ import networkx as nx
 from MDAnalysis.topology.guessers import guess_atom_element
 import MDAnalysis as mda
 import numpy as np
+import torch
 from scipy.spatial.distance import cdist
 from more_itertools import pairwise
 import io
 
-from pynamod.atomic_analysis.base_structures import *
+from pynamod.atomic_analysis.base_structures import nucleotides_pdb
+from pynamod.geometry.traj_handler import Traj_Handler
 
-class Nucleotide:
-    def __init__(self, restype, resid, segid, in_leading_strand):
+class Nucleotide(Traj_Handler):
+    def __init__(self, restype, resid, segid, in_leading_strand,R=None,o=None,s_res=None, e_res=None,traj_len=None):
         self.restype = restype
         self.resid = resid
         self.segid = segid
@@ -17,25 +19,44 @@ class Nucleotide:
         self.previous_nucleotide = None
         self.next_nucleotide = None
         self.base_pair = None
+        self.s_res = s_res
+        self.e_res = e_res
+        if not traj_len:
+            traj_len = 1
+        super().__init__(torch.double,((traj_len,3),(traj_len,3,3)),('o','R'),'base_pair.dna.geom_params')
+        if R is not None:
+            self.R = R
+        elif s_res is not None:
+            self.get_base_ref_frame()
+        else:
+            self.R = torch.eye(3)
+            self.o = torch.zeros(1,3)
+        if o is not None:
+            self.o = o
+
 
     def __lt__(self, other):
         if self.in_leading_strand != other.in_leading_strand:
             return self.in_leading_strand > other.in_leading_strand
         else:
             return self.resid < other.resid
+    
+        
+    def copy(self):
+        return Nucleotide(self.restype, self.resid, self.segid, self.in_leading_strand,self.R.copy(),self.o.copy(), self.s_res, self.e_res)
 
-    def get_base_ref_frame(self, e_res, s_res):
+    def get_base_ref_frame(self):
         '''
         Calculate R frame and origin with the same algorithm as in 3dna.
         -----
         e_res,s_res - experimental residue, standard residue(both are mda.atoms type) with correctly ordered atoms(they can be got by check if nucleotide function)
         returns R frame and origin of nucleotide
         '''
-        s_coord = s_res.positions
-        e_coord = e_res.positions
+        s_coord = self.s_res.positions
+        e_coord = self.e_res.positions
 
-        s_ave = np.mean(s_coord, axis=0)
-        e_ave = np.mean(e_coord, axis=0)
+        s_ave = torch.from_numpy(np.mean(s_coord, axis=0))
+        e_ave = torch.from_numpy(np.mean(e_coord, axis=0))
 
         N = len(e_coord)
         i = np.ones((N, 1))
@@ -55,10 +76,14 @@ class Nucleotide:
         # q *= -1
 
         q0, q1, q2, q3 = q
-        self.R = np.array([[q0 * q0 + q1 * q1 - q2 * q2 - q3 * q3, 2 * (q1 * q2 - q0 * q3), 2 * (q1 * q3 + q0 * q2)],
+        self.R = torch.DoubleTensor([[q0 * q0 + q1 * q1 - q2 * q2 - q3 * q3, 2 * (q1 * q2 - q0 * q3), 2 * (q1 * q3 + q0 * q2)],
                            [2 * (q2 * q1 + q0 * q3), q0 * q0 - q1 * q1 + q2 * q2 - q3 * q3, 2 * (q2 * q3 - q0 * q1)],
                            [2 * (q3 * q1 - q0 * q2), 2 * (q3 * q2 + q0 * q1), q0 * q0 - q1 * q1 - q2 * q2 + q3 * q3]])
-        self.o = e_ave - s_ave.dot(self.R.T)
+        self.o = torch.DoubleTensor(e_ave - (s_ave*self.R).sum(axis=1))
+    
+    R = Traj_Handler.get_property_from_tr('R')
+    o = Traj_Handler.get_property_from_tr('o')
+
 
 
 def build_graph(mda_structure, d_threshold=1.6):
@@ -132,7 +157,7 @@ def check_if_nucleotide(residue, base_graphs=base_graphs):
     return exp_sel, stand_sel, true_base
 
 
-def get_all_nucleotides(DNA_Structure):
+def get_all_nucleotides(DNA_Structure,leading_strands,sel):
     '''
     Create data frame with data about nucleotides from a given pdb.
     -----
@@ -143,17 +168,18 @@ def get_all_nucleotides(DNA_Structure):
     nucleotides_df - result data frame
     '''
     nucleotides = []
-
-    sel = DNA_Structure.u.select_atoms('(type C or type O or type N) and not protein')
+    if sel:
+        sel = DNA_Structure.u.select_atoms(sel)
+    else:
+        sel = DNA_Structure.u.select_atoms('(type C or type O or type N) and not protein')
     sel = sel[sel.altLocs == '']
     for res_numb, residue in enumerate(sel.residues):
         residue_str = residue.atoms
         if 10 < len(residue_str) < 40:  # FIXME
             exp_sel, stand_sel, base = check_if_nucleotide(residue_str)
             if base != '':
-                in_leading_strands = residue.segid in DNA_Structure.leading_strands
-                nucl = Nucleotide(base, residue.resid, residue.segid, in_leading_strands)
-                nucl.get_base_ref_frame(sum(exp_sel), sum(stand_sel))
+                in_leading_strands = residue.segid in leading_strands
+                nucl = Nucleotide(base, residue.resid, residue.segid, in_leading_strands,s_res=sum(stand_sel), e_res=sum(exp_sel),traj_len=DNA_Structure.traj_len)
                 nucleotides.append(nucl)
 
     nucleotides.sort()

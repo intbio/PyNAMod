@@ -15,12 +15,12 @@ class Energy:
         self.K_bend = K_bend
         self.restraints = []
     
-    def set_energy_matrices(self,DNA_structure):
+    def set_energy_matrices(self,CG_structure):
         AVERAGE,FORCE_CONST,DISP = get_consts_olson_98()
-        pairtypes = [pair.pair_name for pair in DNA_structure.pairs_list]
+        pairtypes = [pair.pair_name for pair in CG_structure.dna.pairs_list]
         self._set_matrix(pairtypes,'force_matrix',FORCE_CONST)
         self._set_matrix(pairtypes,'average_step_params',AVERAGE)
-        self._set_real_space_force_mat(DNA_structure) 
+        self._set_real_space_force_mat(CG_structure) 
     
     def add_restraints(self,restraints):
         '''
@@ -36,8 +36,8 @@ class Energy:
         self.charges_multipl_prod.to('cuda')
         self.restraints.to('cuda')
     
-    def get_full_energy(self,DNA_structure):
-        return self._get_elastic_energy(DNA_structure.step_params) + self._get_real_space_total_energy(DNA_structure) + self._get_restraint_energy(DNA_structure)
+    def get_full_energy(self,all_coords,CG_structure):
+        return self._get_elastic_energy(all_coords.local_params) + self._get_real_space_total_energy(all_coords) + self._get_restraint_energy(CG_structure)
         
         
     def _set_matrix(self,pairtypes,attr,ref):
@@ -48,10 +48,10 @@ class Energy:
         setattr(self,attr,matrix)
     
     
-    def _set_real_space_force_mat(self,DNA_structure,ignore_neighbors=5):
-        radii = torch.cat([DNA_structure.radii, DNA_structure.get_proteins_attr('cg_radii')])
-        epsilons = torch.cat([DNA_structure.eps, DNA_structure.get_proteins_attr('eps')])
-        charges = torch.cat([DNA_structure.charges, DNA_structure.get_proteins_attr('cg_charges')])
+    def _set_real_space_force_mat(self,CG_structure,ignore_neighbors=5):
+        radii = CG_structure.radii
+        epsilons = CG_structure.eps
+        charges = CG_structure.charges
         
         self._set_dist_mat_slice(charges.shape[0],ignore_neighbors=ignore_neighbors)
         
@@ -75,12 +75,12 @@ class Energy:
         return self.K_bend*torch.einsum('ijk,ijk',dif_matrix, self.force_matrix)/2.0
     
     
-    def _get_real_space_total_energy(self,DNA_structure,free_energy_func='sigmoid'):
+    def _get_real_space_total_energy(self,all_coords,free_energy_func='sigmoid'):
         '''
         Supported free energy functions: sigmoid, Lennard Jones (LD) or function(dist_matrix,radii_sum_prod,epsilon_mean_prod)
         '''
-        all_coords = torch.cat([DNA_structure.origins,DNA_structure.get_proteins_attr('cg_beads_pos')])
-        dist_matrix = self._triform(torch.cdist(all_coords,all_coords))
+        origins = all_coords.origins.reshape(-1,3)
+        dist_matrix = self._triform(torch.cdist(origins,origins,compute_mode= 'donot_use_mm_for_euclid_dist'))
         electrostatic_e = self.charges_multipl_prod/dist_matrix
         if free_energy_func == 'sigmoid':
             free_energy = self.radii_sum_prod/(torch.sqrt(1/self.epsilon_mean_prod+dist_matrix**2))
@@ -93,9 +93,9 @@ class Energy:
         return self.K_elec*torch.sum(torch.nan_to_num(electrostatic_e, posinf=0, neginf=0)) + self.K_free*torch.sum(torch.nan_to_num(free_energy, posinf=0, neginf=0))
     
 
-    def _get_restraint_energy(self,DNA_structure):
+    def _get_restraint_energy(self,CG_structure):
         if self.restraints:
-            return sum([restraint.get_restraint_energy(DNA_structure) for restraint in self.restraints])
+            return sum([restraint.get_restraint_energy(CG_structure) for restraint in self.restraints])
         else:
             return 0
     
