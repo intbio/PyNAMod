@@ -46,6 +46,10 @@ class Geometrical_Parameters(Traj_Handler):
         self.get_new_params_set(local_params, ref_frames, origins)
         
     
+    def to(self,device):
+        self._ref_frames_traj = self._ref_frames_traj.to(device)
+        self._origins_traj = self._origins_traj.to(device)
+        self._local_params_traj = self._local_params_traj.to(device)
     
     def get_new_params_set(self,local_params = None, ref_frames = None, origins = None):
         init_from_local_params = local_params is not None

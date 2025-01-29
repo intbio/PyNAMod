@@ -127,18 +127,11 @@ class DNA_Structure:
         return pd.concat([df,params_df],axis=1)
         
         
-    def move_to_cuda(self):
-        self.radii.to('cuda')
-        self.eps.to('cuda')
-        self.charges.to('cuda')
-        self.pairs_params.to('cuda')
-        self.steps_params.to('cuda')
-        self.base_ref_frames.to('cuda')
-        for protein in self.proteins:
-            protein.cg_radii.to('cuda')
-            protein.eps.to('cuda')
-            protein.cg_charges.to('cuda')
-            protein.cg_beads_pos.to('cuda') 
+    def to(self,device):
+        self.radii = self.radii.to(device)
+        self.eps = self.eps.to(device)
+        self.charges = self.charges.to(device)
+        self.geom_params.to(device)
         
         
     def copy(self):

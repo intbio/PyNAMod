@@ -45,6 +45,12 @@ class Protein:
                       eps=self.eps.clone(),origins=self.origins.clone(),ref_vectors = self.ref_vectors.clone(),
                       radii = self.radii.clone(),charges = self.charges.clone(),masses = self.masses.clone())
     
+    def to(self,device):
+        self.charges = self.charges.to(device)
+        self.ref_vectors = self.ref_vectors.to(device)
+        self.radii = self.radii.to(device)
+        self.eps = self.eps.to(device)
+    
     def _get_cg_centers(self,random_state):
         steps = 200*self.n_cg_beads
         

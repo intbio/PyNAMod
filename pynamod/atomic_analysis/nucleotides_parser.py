@@ -43,7 +43,7 @@ class Nucleotide(Traj_Handler):
     
         
     def copy(self):
-        return Nucleotide(self.restype, self.resid, self.segid, self.in_leading_strand,self.R.copy(),self.o.copy(), self.s_res, self.e_res)
+        return Nucleotide(self.restype, self.resid, self.segid, self.in_leading_strand,self.R.clone(),self.o.clone(), self.s_res, self.e_res)
 
     def get_base_ref_frame(self):
         '''

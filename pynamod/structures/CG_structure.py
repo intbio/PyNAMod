@@ -8,6 +8,7 @@ from MDAnalysis.topology.guessers import guess_atom_element
 from MDAnalysis.coordinates.memory import MemoryReader
 from MDAnalysis.analysis import align
 
+from pynamod.geometry.all_coords import All_Coords
 from pynamod.structures.DNA_structure import DNA_Structure
 from pynamod.structures.protein import Protein
 
@@ -94,9 +95,9 @@ class CG_Structure:
     
     def view_structure(self,prot_color=[0,0,1],dna_color=[0.6,0.6,0.6],dna_pair_r=5):
         view=nv.NGLWidget()
-        dna_len = self.dna.origins.shape[0]
-        view.shape.add_buffer('sphere',position=self.dna.origins.flatten().tolist(),
-                                  color=dna_color*dna_len,radius=[dna_pair_r]*dna_len)
+        #dna_len = self.dna.origins.shape[0]
+        #view.shape.add_buffer('sphere',position=self.dna.origins.flatten().tolist(),
+        #                          color=dna_color*dna_len,radius=[dna_pair_r]*dna_len)
         for protein in self.proteins:
             view.shape.add_buffer('sphere',position=protein.get_true_pos(self.dna).flatten().tolist(),
                                   color=prot_color*protein.n_cg_beads,radius=protein.radii.tolist())
@@ -129,10 +130,10 @@ class CG_Structure:
         else:
             return torch.empty(0)
         
-    def to_cuda(self):
-        self.dna.to_cuda()
+    def to(self,device):
+        self.dna.to(device)
         for protein in self.proteins:
-            protein.to_cuda()
+            protein.to(device)
         
     
     def __getitem__(self,sl):
