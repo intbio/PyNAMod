@@ -1,6 +1,6 @@
 import pytest
-from pynamod.DNA.DNA_structure_analysis import DNA_structure_from_atomic
-from pynamod.geometry.bp_step_geometry import rebuild_by_full_par_frame_numba
+#from pynamod.DNA.DNA_structure_analysis import DNA_structure_from_atomic
+#from pynamod.geometry.bp_step_geometry import rebuild_by_full_par_frame_numba
 import numpy as np
 import warnings
 

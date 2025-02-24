@@ -4,7 +4,7 @@ import pickle
 from itertools import combinations
 from more_itertools import pairwise
 from scipy.spatial.transform import Rotation as R
-from pynamod.geometry.bp_step_geometry import Geometrical_Parameters
+from pynamod.geometry.geometrical_parameters import Geometrical_Parameters
 
 
 with open('pynamod/atomic_analysis/classifier.pkl', 'rb') as f:
@@ -67,7 +67,7 @@ class Base_Pair:
         return dna_structure.pairs_list.index(self) 
     
     def copy(self,**kwards):
-        new = Base_Pair(lead_nucl = self.lead_nucl.copy(),lag_nucl = self.lag_nucl.copy(),radius=self.radius,charge=self.charge,eps=self.eps,dna_structure=self.dna_structure)
+        new = Base_Pair(lead_nucl = self.lead_nucl.copy(),lag_nucl = self.lag_nucl.copy(),radius=self.radius,charge=self.charge,eps=self.eps,dna_structure=self.dna_structure,geom_params=self.geom_params)
         new.update_references()
         for name,value in kwards.items():
             setattr(new,name,value)

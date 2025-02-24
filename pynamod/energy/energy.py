@@ -10,9 +10,9 @@ class Energy:
         
         self.force_matrix = None
         self.average_step_params = None
-        self.K_free = torch.Tensor(K_free)
-        self.K_elec = torch.Tensor(K_elec)
-        self.K_bend = torch.Tensor(K_bend)
+        self.K_free = torch.Tensor([K_free])
+        self.K_elec = torch.Tensor([K_elec])
+        self.K_bend = torch.Tensor([K_bend])
         self.restraints = []
     
     def set_energy_matrices(self,CG_structure,ignore_neighbors=5):
@@ -40,9 +40,11 @@ class Energy:
         self.K_free = self.K_free.to(device)
         self.K_elec = self.K_elec.to(device)
         self.K_bend = self.K_bend.to(device)
+        for restraint in self.restraints:
+            restraint.to(device)
     
-    def get_full_energy(self,all_coords,CG_structure):
-        return self._get_elastic_energy(all_coords.local_params) + self._get_real_space_total_energy(all_coords) + self._get_restraint_energy(CG_structure)
+    def get_full_energy(self,CG_structure):
+        return self._get_elastic_energy(CG_structure.all_coords.local_params) + self._get_real_space_total_energy(CG_structure.all_coords) + self._get_restraint_energy(CG_structure)
         
         
     def _set_matrix(self,pairtypes,attr,ref):
@@ -120,10 +122,9 @@ class Energy:
 
         x = origins.unsqueeze(1).expand(n, n, 3)
         y = origins.unsqueeze(0).expand(n, n, 3)
-        dist_matrix2 = torch.pow(x - y, 2).sum(2)
-
-        dist_matrix2 = dist_matrix2[dist_mat_slice]
-        electrostatic_e = charges_multipl_prod/dist_matrix2.pow(0.5)
-        free_energy = radii_sum_prod/((1/epsilon_mean_prod+dist_matrix2).pow(0.5))
-        torch.cuda.synchronize()
+        dist_matrix = torch.pow(x - y, 2).sum(2)
+    
+        dist_matrix = dist_matrix[dist_mat_slice].pow(0.5)
+        electrostatic_e = charges_multipl_prod/dist_matrix
+        free_energy = (1-(dist_matrix-radii_sum_prod)/torch.sqrt(0.1+(dist_matrix-radii_sum_prod)**2))*epsilon_mean_prod
         return K_elec*electrostatic_e.sum() + K_free*free_energy.sum()
