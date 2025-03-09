@@ -3,9 +3,10 @@ import torch
 from pynamod.geometry.geometrical_parameters import Geometrical_Parameters
 
 class All_Coords(Geometrical_Parameters):
-    def __init__(self,local_params=None,origins=None,ref_frames=None,traj_len=None,proteins=None):
+    '''Subclass that handles positions of proteins as a part of origins tensor. Proteins origins are stored starting from the highest to the lowest reference index for easier slicing.'''
+    def __init__(self,proteins=None,**kwards):
         self.prot_ind = {}
-        super().__init__(local_params=local_params,origins=origins,ref_frames=ref_frames,traj_len=traj_len)
+        super().__init__(**kwards)
         if proteins:
             self.add_proteins(proteins)
         
@@ -17,8 +18,8 @@ class All_Coords(Geometrical_Parameters):
             self.prot_ind[protein.ref_pair.get_index()] = (start_index, stop_index,protein)
             start_index = stop_index
             
-        prot_ori_frames = torch.zeros(self._origins_traj.shape[0],stop_index-self.len,1,3,dtype = self.dtype)
-        self._origins_traj = torch.hstack([self._origins_traj,prot_ori_frames]) 
+        prot_ori_frames = torch.zeros(self.trajectory.origins_traj.shape[0],stop_index-self.len,1,3,dtype = self.dtype)
+        self.trajectory.origins_traj = torch.hstack([self.trajectory.origins_traj,prot_ori_frames]) 
         
     def get_protein_origins(self,ref_index):
         start,end = self.prot_ind[ref_index][:2]
@@ -47,15 +48,3 @@ class All_Coords(Geometrical_Parameters):
         it._origins_traj = self._origins_traj[:,sl]
         
         return it
-    
-    def __transform_ori(self,change_index,rot_matrix,prev_ori,changed_ori):
-        stop = self.origins.shape[0]
-        print(1)
-        for ref_ind in sorted(self.prot_ind)[::-1]:
-            print(1)
-            if ref_ind < change_index:
-                stop = self.prot_ind[ref_index][0]
-                break
-        
-        self.origins[change_index+1:stop] -= prev_ori
-        self.origins[change_index+1:stop] = self.origins[change_index+1:stop].matmul(rot_matrix.T) + changed_ori

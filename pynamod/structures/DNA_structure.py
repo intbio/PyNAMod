@@ -45,8 +45,8 @@ class DNA_Structure:
         origins = torch.vstack([pair.om for pair in self.pairs_list]).reshape(-1,1,3)
         if self.geom_params:
             self.geom_params.get_new_params_set(ref_frames=ref_frames,origins=origins)
-        else:    
-            self.geom_params = All_Coords(ref_frames=ref_frames,origins=origins,traj_len=self.traj_len)
+        else:
+            self.geom_params = All_Coords(ref_frames=ref_frames,origins=origins)
     
     
     def generate(self,sequence):
@@ -63,7 +63,7 @@ class DNA_Structure:
             lag_nucl = Nucleotide(lag_res, DNA_length-i, 'B', False)
             pair_params = torch.zeros(2,6,dtype=torch.double)
             pair_params[1] = torch.from_numpy(BDNA_step[:6])
-            pair = Base_Pair(lead_nucl,lag_nucl,geom_params = Geometrical_Parameters(local_params=pair_params,traj_len=self.traj_len),dna_structure=self)
+            pair = Base_Pair(lead_nucl,lag_nucl,geom_params = Geometrical_Parameters(local_params=pair_params),dna_structure=self)
             lead_nucl.R,lead_nucl.o = pair.geom_params.ref_frames[0],pair.geom_params.origins[0]
             lag_nucl.R,lag_nucl.o = pair.geom_params.ref_frames[1],pair.geom_params.origins[1]
             lead_nucl.base_pair = lag_nucl.base_pair = pair
@@ -79,7 +79,8 @@ class DNA_Structure:
             prev_pair = pair
             prev_lead_nucl = lead_nucl
             prev_lag_nucl = lag_nucl
-        self.geom_params = Geometrical_Parameters(local_params=step_params,traj_len=self.traj_len)
+        
+        self.geom_params = All_Coords(local_params=step_params)
         self._set_pair_params_list()
     
     def analyze_trajectory(self,u):

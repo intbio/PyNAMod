@@ -26,11 +26,12 @@ class CG_Structure:
         
         - **u** - (optional) contains initial mda Universe if given
     '''
-    def __init__(self,dna_structure=None,proteins = None,mdaUniverse = None,pdb_id=None,all_coords = None,add_proteins = True,file=None):
+    def __init__(self,dna_structure=None,proteins = None,mdaUniverse = None,pdb_id=None,file=None,
+                 all_coords = None,add_proteins = True,trajectory=None):
         if mdaUniverse:
             self.u = mdaUniverse
         elif pdb_id:
-            self.u = mda.Universe(io.StringIO(pypdb.get_pdb_file(pdb_id)), format='PDB')
+            self.u = mda.Universe(io.StringIO(pypdb.pdb_client.get_pdb_file(pdb_id)), format='PDB')
         elif file:
             self.u = mda.Universe(file)
         else:
@@ -41,11 +42,7 @@ class CG_Structure:
         if dna_structure:
             self.dna = dna_structure
         else:
-            try:
-                traj_len = len(self.u.trajectory)
-            except AttributeError:
-                traj_len = 1
-            self.dna = DNA_Structure(u=self.u,traj_len=traj_len)
+            self.dna = DNA_Structure(u=self.u)
         
         self.all_coords = all_coords
         if all_coords:
@@ -107,6 +104,9 @@ class CG_Structure:
         self.proteins[-1].cg_structure = self
         self.proteins[-1].build_model()
         
+    def upload_trajectory(self,trajectory):
+        self.all_coords.trajectory = trajectory
+        
     def get_cg_mda_traj(self,allign_sel='all'):
         '''Method that creates trajectory of CG model as a mda Universe.
         
@@ -150,7 +150,7 @@ class CG_Structure:
         return u
 
     
-    def view_structure(self,prot_color=[0,0,1],dna_color=[0.6,0.6,0.6],dna_pair_r=5):
+    def view_structure(self,prot_color=[0,0,1],dna_color=[0.6,0.6,0.6]):
         '''Method for visualization of current CG structure
             
             Arguments:
@@ -162,7 +162,7 @@ class CG_Structure:
         view=nv.NGLWidget()
         dna_len = self.dna.origins.shape[0]
         view.shape.add_buffer('sphere',position=self.dna.origins.flatten().tolist(),
-                                  color=dna_color*dna_len,radius=[dna_pair_r]*dna_len)
+                                  color=dna_color*dna_len,radius=self.dna.radii.tolist())
         for protein in self.proteins:
             view.shape.add_buffer('sphere',position=protein.origins.flatten().tolist(),
                                   color=prot_color*protein.n_cg_beads,radius=protein.radii.tolist())

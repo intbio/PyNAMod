@@ -1,6 +1,7 @@
 import torch
 
 class Geometry_Functions:
+    '''This class contains functions to rebuild reference frames and ori from local DNA parameters for full strucuture or partially with rotation and to rebuild local parameters from reference frames amd origins. This class is supposed to be used as a super class for Geometrical_Parameters.'''
     def rebuild_ref_frames_and_ori(self,start_index = 0, stop_index = None, start_ref_frame = None,start_origin = None,rebuild_proteins=False):
         if stop_index is None:
             stop_index = self.len
@@ -92,8 +93,8 @@ class Geometry_Functions:
     def __rotate_R(self,change_index,rot_matrix):
         self.ref_frames[change_index:] = rot_matrix.reshape(1,3,3).matmul(self.ref_frames[change_index:])
         R_frames = self.ref_frames[change_index:]
-        if torch.linalg.norm(R_frames,axis=1).mean() != 1:
-            self.ref_frames[change_index:] = abs(torch.linalg.qr(R_frames).Q)*R_frames.sign()
+        #if torch.linalg.norm(R_frames,axis=1).mean() != 1:
+        #    self.ref_frames[change_index:] = abs(torch.linalg.qr(R_frames).Q)*R_frames.sign()
 
     def __transform_ori(self,change_index,rot_matrix,prev_ori,changed_ori):
         stop = self.origins.shape[0]

@@ -8,6 +8,7 @@ import pypdb
 from sklearn.neighbors import KNeighborsClassifier
 
 class Protein:
+    '''This class contains protein model as coarse grained beads with radii and charges. This class is always related to CG structure that stores positions of CG beads in All_Coords object. Init function of this class requires pdb2pqr class if initialized from mda Universe without charges.'''
     def __init__(self,mdaUniverse,n_cg_beads=50,ref_pair = None,eps=1,**kwards):
         self.n_cg_beads = n_cg_beads
         
@@ -31,6 +32,11 @@ class Protein:
         
     
     def build_model(self,random_state=None):
+        '''Runs analysis of atomic structure. 
+        
+            Attributes:
+
+            **random_state** - currently not supported.'''
         self._get_cg_centers(random_state)
         self._get_cg_params()
         
@@ -52,6 +58,7 @@ class Protein:
         self.eps = self.eps.to(device)
     
     def _get_cg_centers(self,random_state):
+        '''Runs optimization algorithm of CG beads positions according to procedure described in https://doi.org/10.1016/j.str.2006.10.003'''
         steps = 200*self.n_cg_beads
         
         non_H_atoms = self.u.select_atoms('not type H')
@@ -85,6 +92,7 @@ class Protein:
 
             
     def _get_cg_params(self):
+        '''This method assigns each atom to a CG beads, than the charge of each bead is determined as a sum of charges of its atoms, and radii is defined by radius of gyration of atom groups of this CG bead.'''
         classifier = KNeighborsClassifier(1)
         classifier.fit(self.origins.reshape(-1,3),range(self.n_cg_beads))
         groups = classifier.predict(self.u.atoms.positions)

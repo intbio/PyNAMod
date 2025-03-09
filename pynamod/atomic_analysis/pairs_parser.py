@@ -12,7 +12,7 @@ with open('pynamod/atomic_analysis/classifier.pkl', 'rb') as f:
 
 
 class Base_Pair:
-    def __init__(self, lead_nucl, lag_nucl,radius=2,charge=-2,eps=0.5,geom_params=None,dna_structure= None):
+    def __init__(self, lead_nucl, lag_nucl,radius=10,charge=-2,eps=0.5,geom_params=None,dna_structure= None):
         if lag_nucl.in_leading_strand:
             lead_nucl, lag_nucl = lag_nucl, lead_nucl
 
@@ -58,7 +58,7 @@ class Base_Pair:
             self.geom_params.get_new_params_set(ref_frames=r_frames,origins=ori)
         else:
             self.geom_params = Geometrical_Parameters(ref_frames = r_frames, origins = ori,
-                                                  pair_params=True,cur_step_cls='dna_structure.geom_params',traj_len=self.dna_structure.traj_len)            
+                                                  pair_params=True)            
 
 
     def get_index(self,dna_structure=None):

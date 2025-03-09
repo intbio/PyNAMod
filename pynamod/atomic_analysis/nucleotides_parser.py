@@ -8,10 +8,9 @@ from more_itertools import pairwise
 import io
 
 from pynamod.atomic_analysis.base_structures import nucleotides_pdb
-from pynamod.geometry.traj_handler import Traj_Handler
 
-class Nucleotide(Traj_Handler):
-    def __init__(self, restype, resid, segid, in_leading_strand,R=None,o=None,s_res=None, e_res=None,traj_len=None):
+class Nucleotide():
+    def __init__(self, restype, resid, segid, in_leading_strand,R=None,o=None,s_res=None, e_res=None):
         self.restype = restype
         self.resid = resid
         self.segid = segid
@@ -21,9 +20,6 @@ class Nucleotide(Traj_Handler):
         self.base_pair = None
         self.s_res = s_res
         self.e_res = e_res
-        if not traj_len:
-            traj_len = 1
-        super().__init__(torch.double,((traj_len,3),(traj_len,3,3)),('o','R'),'base_pair.dna.geom_params')
         if R is not None:
             self.R = R
         elif s_res is not None:
@@ -81,8 +77,6 @@ class Nucleotide(Traj_Handler):
                            [2 * (q3 * q1 - q0 * q2), 2 * (q3 * q2 + q0 * q1), q0 * q0 - q1 * q1 - q2 * q2 + q3 * q3]])
         self.o = torch.DoubleTensor(e_ave - (s_ave*self.R).sum(axis=1))
     
-    R = Traj_Handler.get_property_from_tr('R')
-    o = Traj_Handler.get_property_from_tr('o')
 
 
 
@@ -179,7 +173,7 @@ def get_all_nucleotides(DNA_Structure,leading_strands,sel):
             exp_sel, stand_sel, base = check_if_nucleotide(residue_str)
             if base != '':
                 in_leading_strands = residue.segid in leading_strands
-                nucl = Nucleotide(base, residue.resid, residue.segid, in_leading_strands,s_res=sum(stand_sel), e_res=sum(exp_sel),traj_len=DNA_Structure.traj_len)
+                nucl = Nucleotide(base, residue.resid, residue.segid, in_leading_strands,s_res=sum(stand_sel), e_res=sum(exp_sel))
                 nucleotides.append(nucl)
 
     nucleotides.sort()

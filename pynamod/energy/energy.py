@@ -3,33 +3,68 @@ import numpy as np
 from scipy.spatial.distance import squareform,cdist
 
 from pynamod.energy.energy_constants import *
+from pynamod.external_forces.restraint import Restraint
 
 
 class Energy:
-    def __init__(self,K_free=1,K_elec=1,K_bend=1):
+    '''This class creates force matrices for a given CG structure and calculates its energy.'''
+    def __init__(self,K_free=1,K_elec=1,K_bend=1,KT=1):
         
         self.force_matrix = None
         self.average_step_params = None
         self.K_free = torch.Tensor([K_free])
         self.K_elec = torch.Tensor([K_elec])
         self.K_bend = torch.Tensor([K_bend])
+        self.KT = torch.Tensor([KT])
         self.restraints = []
     
     def set_energy_matrices(self,CG_structure,ignore_neighbors=5):
+        '''Creates matrices for energy calculation.
+        
+            Attributes:
+            
+            **CG_structure** - structure for which matrices are set.
+            
+            **ignore_neighbors** - number of neigboring dna pairs (in both sides) interactions with which are ignored in real space. Deafult 5.'''
         AVERAGE,FORCE_CONST,DISP = get_consts_olson_98()
         pairtypes = [pair.pair_name for pair in CG_structure.dna.pairs_list]
-        self._set_dist_mat_slice(CG_structure,ignore_neighbors=ignore_neighbors)
+        self.ignore_neighbors = ignore_neighbors
+        self._set_dist_mat_slice(CG_structure)
         self._set_matrix(pairtypes,'force_matrix',FORCE_CONST)
         self._set_matrix(pairtypes,'average_step_params',AVERAGE)
         self._set_real_space_force_mat(CG_structure)
         
     
-    def add_restraints(self,restraints):
+    def add_restraints(self,restraints=None,restraint_type=None,CG_structure=None,scaling_factor=1):
         '''
-        input: list of restraints
-        ''' 
-        self.restraints += restraints
+        Attributes: 
         
+        **restraints** - list of restraint objects
+        **restraint_type** - automatic generation of restraint. Could be 'circular_with_linear_restraint','circular_with_elastic_restraint'
+        ''' 
+        if isinstance(restraints,list):
+            self.restraints += restraints
+        if restraint_type == 'circular_with_linear_restraint':
+            self._get_circular_restraint('linear',CG_structure,scaling_factor)
+        elif restraint_type == 'circular_with_elastic_restraint':
+            self._get_circular_restraint('elastic',CG_structure,scaling_factor)
+            
+    def _get_circular_restraint(self,restraint_func,CG_structure,scaling_factor):
+        dna_length = CG_structure.dna.radii.shape[0]
+        if restraint_func == 'elastic':
+            pairtype = CG_structure.dna.pairs_list[0].pair_name[0] + CG_structure.dna.pairs_list[1].pair_name[1]
+            AVERAGE,FORCE_CONST,DISP = get_consts_olson_98()
+            target = torch.tensor(AVERAGE[pairtype])
+            const = torch.tensor(FORCE_CONST[pairtype])
+        elif restraint_func == 'linear':
+            target = torch.tensor(3.4)
+            const = torch.tensor(0.4)
+        self.restraints += [Restraint(0,-1,scaling_factor,target,const,en_restr_func=restraint_func)]
+        self.dist_mat_slice[0:self.ignore_neighbors,
+                            dna_length - self.ignore_neighbors:dna_length] = torch.tril(torch.ones(
+                                            self.ignore_neighbors,self.ignore_neighbors,dtype=bool),diagonal=-1)        
+
+            
     def to(self,device):
         self.force_matrix = self.force_matrix.to(device)
         self.average_step_params = self.average_step_params.to(device)
@@ -43,8 +78,8 @@ class Energy:
         for restraint in self.restraints:
             restraint.to(device)
     
-    def get_full_energy(self,CG_structure):
-        return self._get_elastic_energy(CG_structure.all_coords.local_params) + self._get_real_space_total_energy(CG_structure.all_coords) + self._get_restraint_energy(CG_structure)
+    def get_full_energy(self,all_coords):
+        return self._get_elastic_energy(all_coords.local_params) + self._get_real_space_total_energy(all_coords) + self._get_restraint_energy(all_coords)
         
         
     def _set_matrix(self,pairtypes,attr,ref):
@@ -59,18 +94,23 @@ class Energy:
         radii = CG_structure.radii
         epsilons = CG_structure.eps
         charges = CG_structure.charges
-        
-        self.radii_sum_prod = self._triform(radii+radii.reshape(-1,1))
-        self.epsilon_mean_prod = self._triform(torch.outer(epsilons,epsilons))/2
-        self.charges_multipl_prod = self._triform(torch.outer(charges,charges))
+        self.radii_sum_prod = radii+radii.reshape(-1,1)
+        self.epsilon_mean_prod = torch.outer(epsilons,epsilons)/2
+        self.charges_multipl_prod = torch.outer(charges,charges)
         
     
-    def _set_dist_mat_slice(self,CG_structure,ignore_neighbors):
+    def _get_real_space_triform(self):
+        self.radii_sum_prod = self._triform(self.radii_sum_prod)
+        self.epsilon_mean_prod = self._triform(self.epsilon_mean_prod)/2
+        self.charges_multipl_prod = self._triform(self.charges_multipl_prod)
+        
+    
+    def _set_dist_mat_slice(self,CG_structure):
         length = CG_structure.radii.shape[0]
         dna_length = CG_structure.dna.radii.shape[0]
         self.dist_mat_slice = torch.zeros(length,length,dtype=bool)
         dna_sl = torch.ones(dna_length,dna_length,dtype=bool)
-        self.dist_mat_slice[:dna_length,:dna_length] = torch.triu(dna_sl, diagonal=ignore_neighbors)
+        self.dist_mat_slice[:dna_length,:dna_length] = torch.triu(dna_sl, diagonal=self.ignore_neighbors)
         start = dna_length
         for protein in CG_structure.proteins:
             stop = protein.n_cg_beads+start
@@ -94,14 +134,16 @@ class Energy:
         Supported free energy functions: sigmoid, Lennard Jones (LD) or function(dist_matrix,radii_sum_prod,epsilon_mean_prod)
         '''
         origins = all_coords.origins.reshape(-1,3)
+        if self.radii_sum_prod.dim() == 2:
+            self._get_real_space_triform()
         return self._jit_get_real_e(origins,self.dist_mat_slice,self.radii_sum_prod,self.epsilon_mean_prod,self.charges_multipl_prod,self.K_elec,self.K_free)
     
     
     
 
-    def _get_restraint_energy(self,CG_structure):
+    def _get_restraint_energy(self,all_coords):
         if self.restraints:
-            return sum([restraint.get_restraint_energy(CG_structure) for restraint in self.restraints])
+            return sum([restraint.get_restraint_energy(all_coords) for restraint in self.restraints])
         else:
             return 0
         
@@ -124,7 +166,8 @@ class Energy:
         y = origins.unsqueeze(0).expand(n, n, 3)
         dist_matrix = torch.pow(x - y, 2).sum(2)
     
-        dist_matrix = dist_matrix[dist_mat_slice].pow(0.5)
+        dist_matrix = dist_matrix[dist_mat_slice]
         electrostatic_e = charges_multipl_prod/dist_matrix
+        dist_matrix = dist_matrix.pow(0.5)
         free_energy = (1-(dist_matrix-radii_sum_prod)/torch.sqrt(0.1+(dist_matrix-radii_sum_prod)**2))*epsilon_mean_prod
         return K_elec*electrostatic_e.sum() + K_free*free_energy.sum()
