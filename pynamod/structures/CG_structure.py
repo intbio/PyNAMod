@@ -8,7 +8,6 @@ from MDAnalysis.topology.guessers import guess_atom_element
 from MDAnalysis.coordinates.memory import MemoryReader
 from MDAnalysis.analysis import align
 
-from pynamod.geometry.all_coords import All_Coords
 from pynamod.structures.DNA_structure import DNA_Structure
 from pynamod.structures.protein import Protein
 
@@ -44,10 +43,6 @@ class CG_Structure:
         else:
             self.dna = DNA_Structure(u=self.u)
         
-        self.all_coords = all_coords
-        if all_coords:
-            if add_proteins and proteins:
-                self.all_coords.add_proteins(proteins)
         
         self.dna.cg_structure = self
         if proteins:
@@ -82,6 +77,24 @@ class CG_Structure:
             '''
         self.dna.generate(sequence)
         
+    def save_to_h5(self,file,**dataset_kwards):
+        self.dna.save_to_h5(file,**dataset_kwards)
+        for i,protein in enumerate(self.proteins):
+            protein.save_to_h5(file,group_name=f'protein_{i}_CG_parameters',**dataset_kwards)
+            
+    def load_from_h5(self,file):
+        self.dna.load_from_h5(file)
+        i = 0
+        while True:
+            try:
+                protein = Protein()
+                ref_ind = protein.load_from_h5(file,group_name=f'protein_{i}_CG_parameters')
+                protein.ref_pair = self.dna.pairs_list[ref_ind]
+                protein.cg_structure = self
+                self.proteins.append(protein)
+                i += 1
+            except KeyError:
+                break
     def analyze_protein(self,protein_u=None,n_cg_beads=50,ref_index=None):
         '''Method that finds protein structure in given mda Universe or Universe attached to the instance of class. Coarse Grained structure is than constructed based on protein and added to the proteins list.
         
@@ -98,14 +111,12 @@ class CG_Structure:
         if protein_u is None:
             protein_u = self.u.select_atoms('protein')
             protein_u = protein_u[protein_u.altLocs == '']
-    
-        self.proteins.append(Protein(protein_u,n_cg_beads=n_cg_beads,ref_pair = self.dna.pairs_list[ref_index]))
-        self.all_coords.add_proteins([self.proteins[-1]])
-        self.proteins[-1].cg_structure = self
-        self.proteins[-1].build_model()
         
-    def upload_trajectory(self,trajectory):
-        self.all_coords.trajectory = trajectory
+        new = Protein(protein_u,n_cg_beads=n_cg_beads,ref_pair = self.dna.pairs_list[ref_index])
+        new.cg_structure = self
+        new.build_model()
+        self.proteins.append(new)
+        
         
     def get_cg_mda_traj(self,allign_sel='all'):
         '''Method that creates trajectory of CG model as a mda Universe.
@@ -127,7 +138,7 @@ class CG_Structure:
         coords = []
         
         for ts in self.dna.trajectory:
-            frame_coord = self.dna.origins.reshape(1,-1,3)
+            frame_coord = torch.tensor(self.dna.origins.reshape(1,-1,3))
             if self.proteins:
                 prot_coord = torch.cat([protein.origins for protein in self.proteins],dim=1).reshape(1,-1,3)
                 frame_coord = torch.cat([frame_coord,prot_coord],dim=1)
@@ -162,7 +173,7 @@ class CG_Structure:
         view=nv.NGLWidget()
         dna_len = self.dna.origins.shape[0]
         view.shape.add_buffer('sphere',position=self.dna.origins.flatten().tolist(),
-                                  color=dna_color*dna_len,radius=self.dna.radii.tolist())
+                                  color=dna_color*dna_len,radius=self.dna.pairs_list.radii)
         for protein in self.proteins:
             view.shape.add_buffer('sphere',position=protein.origins.flatten().tolist(),
                                   color=prot_color*protein.n_cg_beads,radius=protein.radii.tolist())
@@ -178,11 +189,13 @@ class CG_Structure:
         '''
         structures = [structure.copy() for structure in structures]
         self.proteins += [protein for structure in structures for protein in structure.proteins]
+        update_value = len(self.dna.pairs_list)
         self.dna.append_structures([structure.dna for structure in structures],copy=False)
-        self.all_coords.add_proteins(self.proteins)
-        for protein in self.proteins:
-            protein.cg_structure = self
-            protein.origins = protein.get_true_pos(self.dna)
+        for structure in structures:
+            for protein in structure.proteins:
+                protein.cg_structure = self
+                protein.ref_pair = self.dna.pairs_list[protein.ref_pair.ind+update_value]
+            update_value += len(structure.dna.pairs_list)
                 
         return self
         
@@ -191,12 +204,11 @@ class CG_Structure:
         '''Method that creates a deep copy of the CG structure.
         '''
         new = CG_Structure(mdaUniverse=self.u)
-        new.all_coords = self.all_coords.copy()
         new.dna = self.dna.copy()
         new.proteins = []
         for protein in self.proteins:
             new.proteins.append(protein.copy())
-            ind = new.proteins[-1].ref_pair.get_index(self.dna)
+            ind = new.proteins[-1].ref_pair.ind
             new.proteins[-1].ref_pair = new.dna.pairs_list[ind]
         return new
     
@@ -236,16 +248,12 @@ class CG_Structure:
                 
     @property
     def radii(self):
-        return torch.cat([self.dna.radii]+[protein.radii for protein in self.proteins])
-    
-    @property
-    def origins(self):
-        return self.all_coords.origins
+        return torch.cat([self.dna.radii.reshape(-1)]+[protein.radii for protein in self.proteins[::-1]])
     
     @property
     def eps(self):
-        return torch.cat([self.dna.eps]+[protein.eps for protein in self.proteins])
+        return torch.cat([self.dna.eps.reshape(-1)]+[protein.eps for protein in self.proteins[::-1]])
     
     @property
     def charges(self):
-        return torch.cat([self.dna.charges]+[protein.charges for protein in self.proteins])
+        return torch.cat([self.dna.charges.reshape(-1)]+[protein.charges for protein in self.proteins[::-1]])

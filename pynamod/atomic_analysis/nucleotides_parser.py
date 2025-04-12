@@ -6,79 +6,16 @@ import torch
 from scipy.spatial.distance import cdist
 from more_itertools import pairwise
 import io
-
+from scipy.spatial.transform import Rotation as R
 from pynamod.atomic_analysis.base_structures import nucleotides_pdb
-
-class Nucleotide():
-    def __init__(self, restype, resid, segid, in_leading_strand,R=None,o=None,s_res=None, e_res=None):
-        self.restype = restype
-        self.resid = resid
-        self.segid = segid
-        self.in_leading_strand = in_leading_strand
-        self.previous_nucleotide = None
-        self.next_nucleotide = None
-        self.base_pair = None
-        self.s_res = s_res
-        self.e_res = e_res
-        if R is not None:
-            self.R = R
-        elif s_res is not None:
-            self.get_base_ref_frame()
-        else:
-            self.R = torch.eye(3)
-            self.o = torch.zeros(1,3)
-        if o is not None:
-            self.o = o
+from pynamod.atomic_analysis.structures_storage import Nucleotides_Storage
 
 
-    def __lt__(self, other):
-        if self.in_leading_strand != other.in_leading_strand:
-            return self.in_leading_strand > other.in_leading_strand
-        else:
-            return self.resid < other.resid
-    
-        
-    def copy(self):
-        return Nucleotide(self.restype, self.resid, self.segid, self.in_leading_strand,self.R.clone(),self.o.clone(), self.s_res, self.e_res)
 
-    def get_base_ref_frame(self):
-        '''
-        Calculate R frame and origin with the same algorithm as in 3dna.
-        -----
-        e_res,s_res - experimental residue, standard residue(both are mda.atoms type) with correctly ordered atoms(they can be got by check if nucleotide function)
-        returns R frame and origin of nucleotide
-        '''
-        s_coord = self.s_res.positions
-        e_coord = self.e_res.positions
-
-        s_ave = torch.from_numpy(np.mean(s_coord, axis=0))
-        e_ave = torch.from_numpy(np.mean(e_coord, axis=0))
-
-        N = len(e_coord)
-        i = np.ones((N, 1))
-        cov_mat = (s_coord.T.dot(e_coord) - s_coord.T.dot(i).dot(i.T).dot(e_coord) / N) / (N - 1)
-
-        M = np.array([[cov_mat[0, 0] + cov_mat[1, 1] + cov_mat[2, 2], cov_mat[1, 2] - cov_mat[2, 1],
-                       cov_mat[2, 0] - cov_mat[0, 2], cov_mat[0, 1] - cov_mat[1, 0]],
-                      [cov_mat[1, 2] - cov_mat[2, 1], cov_mat[0, 0] - cov_mat[1, 1] - cov_mat[2, 2],
-                       cov_mat[0, 1] + cov_mat[1, 0], cov_mat[2, 0] + cov_mat[0, 2]],
-                      [cov_mat[2, 0] - cov_mat[0, 2], cov_mat[0, 1] + cov_mat[1, 0],
-                       -cov_mat[0, 0] + cov_mat[1, 1] - cov_mat[2, 2], cov_mat[1, 2] + cov_mat[2, 1]],
-                      [cov_mat[0, 1] - cov_mat[1, 0], cov_mat[2, 0] + cov_mat[0, 2], cov_mat[1, 2] + cov_mat[2, 1],
-                       -cov_mat[0, 0] - cov_mat[1, 1] + cov_mat[2, 2]]])
-        eigen = np.linalg.eig(M)
-        index = np.argmax(eigen[0])
-        q = eigen[1][:, index]
-        # q *= -1
-
-        q0, q1, q2, q3 = q
-        self.R = torch.DoubleTensor([[q0 * q0 + q1 * q1 - q2 * q2 - q3 * q3, 2 * (q1 * q2 - q0 * q3), 2 * (q1 * q3 + q0 * q2)],
-                           [2 * (q2 * q1 + q0 * q3), q0 * q0 - q1 * q1 + q2 * q2 - q3 * q3, 2 * (q2 * q3 - q0 * q1)],
-                           [2 * (q3 * q1 - q0 * q2), 2 * (q3 * q2 + q0 * q1), q0 * q0 - q1 * q1 - q2 * q2 + q3 * q3]])
-        self.o = torch.DoubleTensor(e_ave - (s_ave*self.R).sum(axis=1))
-    
-
-
+def get_base_u(base_type):
+    base_u = mda.Universe(io.StringIO(nucleotides_pdb[base_type]), format='PDB')
+    base_u.add_TopologyAttr('elements', [guess_atom_element(name) for name in base_u.atoms.names])
+    return base_u.select_atoms('not name ORI')
 
 def build_graph(mda_structure, d_threshold=1.6):
     '''
@@ -97,6 +34,15 @@ def build_graph(mda_structure, d_threshold=1.6):
     nx.set_node_attributes(graph, nodes_names)
     return graph
 
+base_graphs = {}
+for base in ['A', 'T', 'G', 'C', 'U']:
+    mda_str = get_base_u(base)
+    base_graphs[base] = build_graph(mda_str)
+atoms_to_exclude = {'A': [5], 'T': [2, 5, 8], 'G': [5, 8], 'C': [2, 5], 'U': []}
+
+
+    
+
 
 def _check_atom_name(node1, node2):
     '''
@@ -112,8 +58,45 @@ for base in ['A', 'T', 'G', 'C', 'U']:
     base_graphs[base] = build_graph(mda_str.select_atoms('not name ORI'))
 atoms_to_exclude = {'A': [5], 'T': [2, 5, 8], 'G': [5, 8], 'C': [2, 5], 'U': []}
 
+def get_base_ref_frame(s_res,e_res):
+    '''
+    Calculate R frame and origin with the same algorithm as in 3dna.
+    -----
+    e_res,s_res - experimental residue, standard residue(both are mda.atoms type) with correctly ordered atoms(they can be got by check if nucleotide function)
+    returns R frame and origin of nucleotide
+    '''
+    s_coord = s_res.positions
+    e_coord = e_res.positions
 
-def check_if_nucleotide(residue, base_graphs=base_graphs):
+    s_ave = torch.from_numpy(np.mean(s_coord, axis=0))
+    e_ave = torch.from_numpy(np.mean(e_coord, axis=0))
+
+    N = len(e_coord)
+    i = np.ones((N, 1))
+    cov_mat = (s_coord.T.dot(e_coord) - s_coord.T.dot(i).dot(i.T).dot(e_coord) / N) / (N - 1)
+
+    M = np.array([[cov_mat[0, 0] + cov_mat[1, 1] + cov_mat[2, 2], cov_mat[1, 2] - cov_mat[2, 1],
+                   cov_mat[2, 0] - cov_mat[0, 2], cov_mat[0, 1] - cov_mat[1, 0]],
+                  [cov_mat[1, 2] - cov_mat[2, 1], cov_mat[0, 0] - cov_mat[1, 1] - cov_mat[2, 2],
+                   cov_mat[0, 1] + cov_mat[1, 0], cov_mat[2, 0] + cov_mat[0, 2]],
+                  [cov_mat[2, 0] - cov_mat[0, 2], cov_mat[0, 1] + cov_mat[1, 0],
+                   -cov_mat[0, 0] + cov_mat[1, 1] - cov_mat[2, 2], cov_mat[1, 2] + cov_mat[2, 1]],
+                  [cov_mat[0, 1] - cov_mat[1, 0], cov_mat[2, 0] + cov_mat[0, 2], cov_mat[1, 2] + cov_mat[2, 1],
+                   -cov_mat[0, 0] - cov_mat[1, 1] + cov_mat[2, 2]]])
+    eigen = np.linalg.eig(M)
+    index = np.argmax(eigen[0])
+    q = eigen[1][:, index]
+    # q *= -1
+
+    q0, q1, q2, q3 = q
+    R = torch.DoubleTensor([[q0 * q0 + q1 * q1 - q2 * q2 - q3 * q3, 2 * (q1 * q2 - q0 * q3), 2 * (q1 * q3 + q0 * q2)],
+                       [2 * (q2 * q1 + q0 * q3), q0 * q0 - q1 * q1 + q2 * q2 - q3 * q3, 2 * (q2 * q3 - q0 * q1)],
+                       [2 * (q3 * q1 - q0 * q2), 2 * (q3 * q2 + q0 * q1), q0 * q0 - q1 * q1 - q2 * q2 + q3 * q3]])
+    o = torch.DoubleTensor(e_ave - (s_ave*R).sum(axis=1))
+    return R,o
+
+
+def check_if_nucleotide(residue, base_graphs=base_graphs,candidates = ['G', 'T', 'A', 'C', 'U']):
     # tune speed
     '''
     Find if residue of pdb structure is nucleotide and get it type.
@@ -130,7 +113,7 @@ def check_if_nucleotide(residue, base_graphs=base_graphs):
     exp_sel = []
     true_base = ''
     graph = build_graph(residue)
-    for base in ['G', 'T', 'A', 'C', 'U']:
+    for base in candidates:
         base_graph = base_graphs[base].copy()
         ismags_inst = nx.algorithms.isomorphism.ISMAGS(graph, base_graph, node_match=_check_atom_name)
         mapping = list(ismags_inst.find_isomorphisms(symmetry=True))
@@ -151,6 +134,127 @@ def check_if_nucleotide(residue, base_graphs=base_graphs):
     return exp_sel, stand_sel, true_base
 
 
+
+
+class Nucleotide:
+    def __init__(self,storage_class, ind):
+        self.storage_class = storage_class
+        self.ind = ind
+
+
+    def __lt__(self, other):
+        if self.leading_strand != other.leading_strand:
+            return self.leading_strand > other.leading_strand
+        else:
+            return self.resid < other.resid
+    
+        
+    def copy(self):
+        return Nucleotide(self.restype, self.resid, self.segid, self.leading_strand,self.ref_frame.clone(),self.origin.clone(), self.s_residue, self.e_residue)
+    
+    def __setter(self,value,attr):
+        getattr(self.storage_class,self.storage_class.get_name(attr))[self.ind] = value
+        
+    def __getter(self,attr):
+        return getattr(self.storage_class,self.storage_class.get_name(attr))[self.ind]
+        
+    def __set_property(attr):
+        setter = lambda self,value: self.__setter(value,attr=attr)
+        getter = lambda self: self.__getter(attr=attr)
+        return property(fset=setter,fget=getter)
+        
+    restype = __set_property('restype')
+    resid = __set_property('resid')
+    segid = __set_property('segid')
+    leading_strand = __set_property('leading_strand')
+    base_pair = __set_property('base_pair')   
+    
+    @property
+    def origin(self):
+        value = self.__getter('origin')
+        if value is None:
+            R,o = get_base_ref_frame(self.s_residue,self.e_residue)
+            self.__setter('ref_frame',R)
+            self.__setter('origin',o)
+            value = o
+        return value
+    
+    @origin.setter
+    def origin(self,value):
+        self.__setter('origin',value)
+        
+    @property
+    def ref_frame(self):
+        value = self.__getter('ref_frame')
+        if value is None:
+            R,o = get_base_ref_frame(self.s_residue,self.e_residue)
+            self.__setter('ref_frame',R)
+            self.__setter('origin',o)
+            value = R
+        return value
+    
+    @ref_frame.setter
+    def ref_frame(self,value):
+        self.__setter('ref_frame',value)
+        
+    
+        
+    @property
+    def s_residue(self):
+        value = self.__getter('s_residue')
+        if value is None:
+            value = get_base_u(self.restype)
+            self.__setter('s_residue',value)
+        return value
+    
+    @s_residue.setter
+    def s_residue(self,value):
+        self.__setter('s_residue',value)
+        
+        
+    @property
+    def e_residue(self):
+        value = self.__getter('e_residue')
+        if value is None:
+            if self.storage_class.mda_u is not None:
+                u = self.storage_class.mda_u.select_atoms(f'resid {self.resid} and segid {self.segid}')
+            else:
+                u = get_base_u(self.restype)
+                
+            exp_sel, stand_sel, _ = check_if_nucleotide(residue,candidates=[self.restype])
+            self.__setter('s_residue',sum(stand_sel))
+            self.__setter('e_residue',sum(exp_sel))
+            value = exp_sel
+    
+        return value
+    
+    @e_residue.setter
+    def e_residue(self,value):
+        self._setter('e_residue',value)
+        
+        
+    @property
+    def next_nucleotide(self):
+        ind = self.storage_class.e_residues.index(self.e_residue) + 1
+        if ind == len(self.storage_class) or self.storage_class.leading_strands[ind] != self.leading_strand:
+            return None
+
+        return self.storage_class[ind]
+
+    @property
+    def previous_nucleotide(self):
+        ind = self.storage_class.e_residues.index(self.e_residue) - 1
+        if ind == -1 or self.storage_class.leading_strands[ind] != self.leading_strand:
+            return None
+
+        return self.storage_class[ind]
+
+    def __repr__(self):
+        return f'<Nucleotide with type {self.restype}, resid {self.resid} and segid {self.segid}>'
+    
+        
+
+        
 def get_all_nucleotides(DNA_Structure,leading_strands,sel):
     '''
     Create data frame with data about nucleotides from a given pdb.
@@ -161,7 +265,7 @@ def get_all_nucleotides(DNA_Structure,leading_strands,sel):
     base_graphs - dictionary of graphs which represent 5 nucleotides
     nucleotides_df - result data frame
     '''
-    nucleotides = []
+    nucleotides_data = Nucleotides_Storage(Nucleotide,DNA_Structure.u)
     if sel:
         sel = DNA_Structure.u.select_atoms(sel)
     else:
@@ -172,16 +276,10 @@ def get_all_nucleotides(DNA_Structure,leading_strands,sel):
         if 10 < len(residue_str) < 40:  # FIXME
             exp_sel, stand_sel, base = check_if_nucleotide(residue_str)
             if base != '':
-                in_leading_strands = residue.segid in leading_strands
-                nucl = Nucleotide(base, residue.resid, residue.segid, in_leading_strands,s_res=sum(stand_sel), e_res=sum(exp_sel))
-                nucleotides.append(nucl)
-
-    nucleotides.sort()
-    for cur_nucleotide,next_nucleotide in pairwise(nucleotides):
-        if cur_nucleotide.in_leading_strand == next_nucleotide.in_leading_strand == 1:
-            cur_nucleotide.next_nucleotide = next_nucleotide
-            next_nucleotide.previous_nucleotide = cur_nucleotide
-        elif cur_nucleotide.in_leading_strand == next_nucleotide.in_leading_strand == 0:
-            cur_nucleotide.previous_nucleotide = next_nucleotide
-            next_nucleotide.next_nucleotide = cur_nucleotide
-    return nucleotides
+                leading_strand = residue.segid in leading_strands
+                R,o = get_base_ref_frame(sum(stand_sel),sum(exp_sel))
+                nucleotides_data.append(base, residue.resid, residue.segid, leading_strand,R,o.reshape(1,3),sum(stand_sel),sum(exp_sel),None)
+                
+    nucleotides_data.sort('leading_strand','resid')
+    nucleotides_data = nucleotides_data[nucleotides_data.leading_strands] + nucleotides_data[[not i for i in nucleotides_data.leading_strands]]
+    return nucleotides_data

@@ -1,7 +1,9 @@
 import torch
 
-from pynamod.geometry.trajectories import Tensor_Trajectory,H5_Trajectory,mod_Tensor
+from pynamod.geometry.trajectories import Tensor_Trajectory,H5_Trajectory
 from pynamod.geometry.bp_step_geometry import Geometry_Functions
+from pynamod.geometry.bp_step_geometry import Geometry_Functions
+from pynamod.geometry.tensor_subclasses import mod_Tensor
 
 class Geometrical_Parameters(Geometry_Functions):
     def __init__(self,local_params = None, ref_frames = None, origins = None,trajectory=None,pair_params=False,auto_rebuild=True,empty=False):
@@ -25,7 +27,7 @@ class Geometrical_Parameters(Geometry_Functions):
             if isinstance(trajectory,H5_Trajectory):
                 self.auto_rebuild = False
         elif not empty:
-            self.trajectory = Tensor_Trajectory(self.dtype,1,self.len,self)
+            self.trajectory = Tensor_Trajectory(self.dtype,1,self.len,lambda x: mod_Tensor(x,self))
         if not empty:
             self.get_new_params_set(local_params, ref_frames, origins)
         
@@ -122,15 +124,11 @@ class Geometrical_Parameters(Geometry_Functions):
     
     
     def __setter(self,value,attr,rebuild_func_name):
-        if isinstance(self.trajectory,Tensor_Trajectory):
-            attr += '_traj'
         self.trajectory._set_frame_attr(attr,value)
         if self._auto_rebuild_sw:
             self.rebuild(rebuild_func_name)
             
     def __getter(self,attr):
-        if isinstance(self.trajectory,Tensor_Trajectory):
-            attr += '_traj'
         return self.trajectory._get_frame_attr(attr)
     
     def __set_property(attr,rebuild_func_name):

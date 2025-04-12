@@ -9,15 +9,15 @@ channels:
 
 dependencies:
   - python=3.11.9
-  - ipykernel
-  - mdanalysis
-  - pypdb
+  - ipykernel=6.28.0
+  - mdanalysis=2.7.0
+  - pypdb=2.4
   - numba
   - nglview=3.0.3
-  - pytorch
+  - pytorch=2.3.1
   - pytorch-cuda=12.1
-  - torchvision
-  - torchaudio
+  - torchvision=0.18.1
+  - torchaudio=2.3.1
   - seaborn
   - more-itertools
   - pytest

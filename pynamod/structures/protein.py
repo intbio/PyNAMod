@@ -7,20 +7,23 @@ import tempfile
 import pypdb
 from sklearn.neighbors import KNeighborsClassifier
 
+
 class Protein:
     '''This class contains protein model as coarse grained beads with radii and charges. This class is always related to CG structure that stores positions of CG beads in All_Coords object. Init function of this class requires pdb2pqr class if initialized from mda Universe without charges.'''
-    def __init__(self,mdaUniverse,n_cg_beads=50,ref_pair = None,eps=1,**kwards):
+    def __init__(self,mdaUniverse=None,n_cg_beads=50,ref_pair = None,eps=1,**kwards):
         self.n_cg_beads = n_cg_beads
         
-        if hasattr(mdaUniverse.atoms,'charges'):
-            self.u = mdaUniverse
+        if mdaUniverse:
+            if hasattr(mdaUniverse.atoms,'charges'):
+                self.u = mdaUniverse
+            else:
+                pdb_temp = tempfile.NamedTemporaryFile(suffix='.pdb')
+                pqr_temp = tempfile.NamedTemporaryFile(suffix='.pqr')
+                mdaUniverse.atoms.write(pdb_temp.name)
+                process = subprocess.run(['pdb2pqr', '--ff=AMBER','--log-level=CRITICAL', pdb_temp.name, pqr_temp.name])
+                self.u = mda.Universe(pqr_temp.name)
         else:
-            pdb_temp = tempfile.NamedTemporaryFile(suffix='.pdb')
-            pqr_temp = tempfile.NamedTemporaryFile(suffix='.pqr')
-            mdaUniverse.atoms.write(pdb_temp.name)
-            process = subprocess.run(['pdb2pqr', '--ff=AMBER','--log-level=CRITICAL', pdb_temp.name, pqr_temp.name])
-            self.u = mda.Universe(pqr_temp.name)
-
+            self.u = None
         self.ref_pair = ref_pair
         if isinstance(eps,torch.Tensor):
             self.eps = eps
@@ -40,10 +43,28 @@ class Protein:
         self._get_cg_centers(random_state)
         self._get_cg_params()
         
+    def save_to_h5(self,file,group_name='protein_0_CG_parameters',**dataset_kwards):
+        group = file.create_group(group_name)
+        group.create_dataset('ref_vectors',data=self.ref_vectors,**dataset_kwards)
+        group.create_dataset('charges',data=self.charges,**dataset_kwards)
+        group.create_dataset('radii',data=self.radii,**dataset_kwards)
+        group.create_dataset('masses',data=self.masses,**dataset_kwards)
+        group.create_dataset('eps',data=self.eps,**dataset_kwards)
+        group.create_dataset('supdata',data=[self.n_cg_beads,self.ref_pair.ind],**dataset_kwards)
+        
+    def load_from_h5(self,file,group_name='protein_0_CG_parameters'):
+        self.ref_vectors = torch.from_numpy(file[group_name]['ref_vectors'][:]).to(torch.double)
+        self.charges = torch.from_numpy(file[group_name]['charges'][:])
+        self.radii = torch.from_numpy(file[group_name]['radii'][:])
+        self.masses = torch.from_numpy(file[group_name]['masses'][:])
+        self.eps = torch.from_numpy(file[group_name]['eps'][:])
+        self.n_cg_beads = int(file[group_name]['supdata'][0])
+        return int(file[group_name]['supdata'][1])
+        
     def get_true_pos(self,dna_structure=None,ref_om=None,ref_Rm=None):
         if ref_om is None:
-            ref_om = dna_structure.origins[self.ref_pair.get_index()]
-            ref_Rm = dna_structure.ref_frames[self.ref_pair.get_index()]
+            ref_om = torch.tensor(dna_structure.origins[self.ref_pair.ind]).to(self.ref_vectors.dtype)
+            ref_Rm = torch.tensor(dna_structure.ref_frames[self.ref_pair.ind]).to(self.ref_vectors.dtype)
 
         return torch.matmul(self.ref_vectors.reshape(-1,1,3),ref_Rm.T) + ref_om
     
@@ -56,6 +77,7 @@ class Protein:
         self.charges = self.charges.to(device)
         self.radii = self.radii.to(device)
         self.eps = self.eps.to(device)
+        self.ref_vectors = self.ref_vectors.to(device)
     
     def _get_cg_centers(self,random_state):
         '''Runs optimization algorithm of CG beads positions according to procedure described in https://doi.org/10.1016/j.str.2006.10.003'''
@@ -85,11 +107,13 @@ class Protein:
 
             origins = origins + eps * np.exp(-k_beads/lmbd).reshape(-1,1) * (ref_atom_r - origins)
         
-        self.origins = torch.from_numpy(origins.reshape(-1,1,3))
+        origins = torch.from_numpy(origins.reshape(-1,1,3))
         ref_om = self.ref_pair.om
         ref_Rm = self.ref_pair.Rm
-        self.ref_vectors = torch.matmul((self.origins - ref_om),ref_Rm)
+        self.ref_vectors = torch.matmul((origins - ref_om),ref_Rm)
+        
 
+    
             
     def _get_cg_params(self):
         '''This method assigns each atom to a CG beads, than the charge of each bead is determined as a sum of charges of its atoms, and radii is defined by radius of gyration of atom groups of this CG bead.'''
@@ -113,9 +137,4 @@ class Protein:
     
     @property
     def origins(self):
-        return self.cg_structure.all_coords.get_protein_origins(self.ref_pair.get_index())
-   
-    @origins.setter
-    def origins(self,value):
-        self.cg_structure.all_coords.set_protein_origins(self.ref_pair.get_index(),value)
-    
+        return self.get_true_pos(self.cg_structure.dna)

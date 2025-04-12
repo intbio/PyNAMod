@@ -1,6 +1,7 @@
 import torch
 
 from pynamod.geometry.geometrical_parameters import Geometrical_Parameters
+from pynamod.geometry.tensor_subclasses import mod_Tensor
 
 class All_Coords(Geometrical_Parameters):
     '''Subclass that handles positions of proteins as a part of origins tensor. Proteins origins are stored starting from the highest to the lowest reference index for easier slicing.'''
@@ -11,15 +12,16 @@ class All_Coords(Geometrical_Parameters):
             self.add_proteins(proteins)
         
     def add_proteins(self,proteins_list):
-        start_index = self.len
-        proteins_list = sorted(proteins_list,key = lambda x: - x.ref_pair.get_index())
-        for protein in proteins_list:
-            stop_index = start_index + protein.n_cg_beads
-            self.prot_ind[protein.ref_pair.get_index()] = (start_index, stop_index,protein)
-            start_index = stop_index
+        if proteins_list:
+            start_index = self.len
+            proteins_list = sorted(proteins_list,key = lambda x: - x.ref_pair.get_index())
+            for protein in proteins_list:
+                stop_index = start_index + protein.n_cg_beads
+                self.prot_ind[protein.ref_pair.get_index()] = (start_index, stop_index,protein)
+                start_index = stop_index
             
-        prot_ori_frames = torch.zeros(self.trajectory.origins_traj.shape[0],stop_index-self.len,1,3,dtype = self.dtype)
-        self.trajectory.origins_traj = torch.hstack([self.trajectory.origins_traj,prot_ori_frames]) 
+            prot_ori_frames = torch.zeros(self.trajectory.origins_traj.shape[0],stop_index-self.len,3,dtype = self.dtype)
+            self.trajectory.origins_traj = torch.hstack([self.trajectory.origins_traj,prot_ori_frames]) 
         
     def get_protein_origins(self,ref_index):
         start,end = self.prot_ind[ref_index][:2]
