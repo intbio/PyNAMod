@@ -1,4 +1,5 @@
 import torch
+import numpy as np
 import h5py
 
 from pynamod.geometry.tensor_subclasses import mod_Tensor,Origins_Tensor
@@ -102,6 +103,40 @@ class H5_Trajectory(Trajectory):
     def get_len(self):
         return self._last_frame_ind
     
+    def get_energies_arr(self,ind):
+        if not 'energies' in self.attrs_names: return None
+    
+        energy_arr = np.zeros((self._last_frame_ind))
+        for i in range(self._last_frame_ind):
+            energy_arr[i] = self.file[str(i).zfill(self.string_format_val)]['energies'][ind]
+        
+        return energy_arr
+    
+    def get_energy_array_slice(self,name,sl):
+        if name != 'total':
+            ind  = ['bend','elst','ld','restr'].index(name)
+            
+        energy_arr = np.zeros((self._last_frame_ind))[sl]
+        for en_i,i in enumerate(list(range(self._last_frame_ind))[sl]):
+            if name == 'total':
+                energy_arr[en_i] = np.sum(self.file[str(i).zfill(self.string_format_val)]['energies'][:])
+            else:
+                energy_arr[en_i] = self.file[str(i).zfill(self.string_format_val)]['energies'][ind]
+                
+        return energy_arr
+        
+        
+    
+    bend_energies = property(fget=lambda self:self.get_energies_arr(0))
+    elst_energies = property(fget=lambda self:self.get_energies_arr(1))
+    ld_energies = property(fget=lambda self:self.get_energies_arr(2))
+    restr_energies = property(fget=lambda self:self.get_energies_arr(3))
+    
+    @property
+    def total_energies(self):
+        if not 'energies' in self.attrs_names: return None
+        return self.bend_energies + self.elst_energies + self.ld_energies + self.restr_energies
+    
                                                        
 class Integrator_Trajectory(Tensor_Trajectory):
     def __init__(self,proteins_list,dtype,traj_len,data_len):
@@ -122,8 +157,8 @@ class Integrator_Trajectory(Tensor_Trajectory):
             return self.proteins_data[0][self.proteins_data[1] >= dna_index].sum()
         else:
             return 0
+        
 
-    
         
     origins = property(fset=lambda self,value: self._set_frame_attr('origins',value),
                        fget=lambda self: self._get_frame_attr('origins'))
@@ -133,3 +168,4 @@ class Integrator_Trajectory(Tensor_Trajectory):
                             fget=lambda self: self._get_frame_attr('local_params'))
     prot_origins = property(fset=lambda self,value: self._set_frame_attr('prot_origins',value),
                             fget=lambda self: self._get_frame_attr('prot_origins'))
+    

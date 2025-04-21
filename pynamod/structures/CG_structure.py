@@ -140,7 +140,7 @@ class CG_Structure:
         for ts in self.dna.trajectory:
             frame_coord = torch.tensor(self.dna.origins.reshape(1,-1,3))
             if self.proteins:
-                prot_coord = torch.cat([protein.origins for protein in self.proteins],dim=1).reshape(1,-1,3)
+                prot_coord = torch.vstack([protein.origins for protein in self.proteins]).reshape(1,-1,3)
                 frame_coord = torch.cat([frame_coord,prot_coord],dim=1)
             coords.append(frame_coord)
         coords = torch.cat(coords).numpy()

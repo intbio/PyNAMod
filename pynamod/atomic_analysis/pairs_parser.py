@@ -7,7 +7,10 @@ from scipy.spatial.transform import Rotation as R
 from pynamod.geometry.geometrical_parameters import Geometrical_Parameters
 from pynamod.atomic_analysis.structures_storage import Pairs_Storage
 
-with open('pynamod/atomic_analysis/classifier.pkl', 'rb') as f:
+from importlib.resources import files
+
+path = files('pynamod').joinpath('atomic_analysis/classifier.pkl')
+with open(path, 'rb') as f:
     classifier = pickle.load(f)
 
 

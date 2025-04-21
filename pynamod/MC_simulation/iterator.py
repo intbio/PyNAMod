@@ -1,4 +1,5 @@
 import torch
+import time
 import numpy as np
 from tqdm.auto import tqdm
 
@@ -13,17 +14,19 @@ class Iterator:
         self.sigma_transl = sigma_transl
         self.sigma_rot = sigma_rot
         self.h5_trajectory = trajectory
+        self.h5_trajectory.attrs_names.append('energies')
     
     
     
     def run(self,movable_steps,target_accepted_steps=int(1e5),max_steps=int(1e6),transfer_to_memory_every=None,save_every=1,
-            HDf5_file=None,mute=False,KT=1,integration_mod='minimize',device='cpu',trajectory = None):
+            HDf5_file=None,mute=False,start_from_traj=False,KT_factor=1,integration_mod='minimize',device='cpu'):
         
-        self._prepare_system(trajectory,target_accepted_steps,transfer_to_memory_every,device,movable_steps,integration_mod)
+        self._prepare_system(target_accepted_steps,transfer_to_memory_every,device,movable_steps,integration_mod,start_from_traj)
         
-        total_step_bar = tqdm(total=max_steps,desc='Steps')
+        total_step_bar = tqdm(total=max_steps,desc='Steps',disable=mute)
         info_pbar = tqdm(total=100,bar_format='{l_bar}{bar}{postfix}',desc='Acceptance rate',disable=mute)
-        
+        KT = KT_factor*self.energy.KT
+        print("Starting time:",time.strftime('%D %H:%M:%S',time.localtime()))
         try:
             while self.total_step < max_steps and self.accepted_steps < target_accepted_steps:
                 
@@ -43,8 +46,9 @@ class Iterator:
         self._transfer_to_memory(steps=self.trajectory.cur_step)
         if self.accepted_steps >= target_accepted_steps:
             print('target accepted steps reached')
-
-        print('accepted_steps',self.accepted_steps)
+        print("Finish time:",time.strftime('%D %H:%M:%S',time.localtime()))
+        print('accepted steps:',self.accepted_steps)
+        print('total steps:',self.total_step)
     
     def to(self,device):
         self.trajectory.to(device)
@@ -52,28 +56,30 @@ class Iterator:
         
             
             
-    def _prepare_system(self,trajectory,target_accepted_steps,transfer_to_memory_every,device,movable_steps,integration_mod):
+    def _prepare_system(self,target_accepted_steps,transfer_to_memory_every,device,movable_steps,integration_mod,start_from_traj):
         self.normal_scale = torch.tensor([*[self.sigma_transl]*3,*[self.sigma_rot]*3],device=device)
         
         if not transfer_to_memory_every:
             transfer_to_memory_every = target_accepted_steps
         self.transfer_to_memory_every = transfer_to_memory_every    
-        if trajectory is not None:
-            self.h5_trajectory = trajectory
         self.total_step=0
         self.accepted_steps=0
         self.last_accepted=0
         
-        self._create_tens_trajectory()
+        self._create_tens_trajectory(start_from_traj)
         self.to(device)
         self.energy.mod_real_space_mat()
         self.prev_e = torch.hstack(self.energy.get_energy_components(self.trajectory))
+        try:
+            self.h5_trajectory.file[str(self.h5_trajectory.cur_step).zfill(self.h5_trajectory.string_format_val
+                                                                          )].create_dataset('energies',data=self.prev_e.numpy(force=True))
+        except ValueError:
+            pass
         self.energy_comp_traj = torch.zeros(self.transfer_to_memory_every,4,device=device)
         
         self._set_change_indices(movable_steps,integration_mod)
         
         self.geom_func = Geometry_Functions()
-        self.energies = []
         self.change = torch.zeros(6,dtype=self.trajectory.origins.dtype,device=device)
         self.normal_mean = torch.zeros(6,device=device)
     
@@ -86,14 +92,20 @@ class Iterator:
             self.movable_ind_len = self.movable_ind.shape[0]
     
     
-    def _create_tens_trajectory(self):
-        init_local_params = self.dna_structure.dna.geom_params.local_params
-        init_ref_frames = self.dna_structure.dna.geom_params.ref_frames
-        init_ori = self.dna_structure.dna.geom_params.origins
-        if self.dna_structure.proteins:
-            init_prot_ori = torch.vstack([protein.origins for protein in self.dna_structure.proteins[::-1]])
+    def _create_tens_trajectory(self,start_from_traj):
+        if start_from_traj:
+            init_local_params = self.h5_trajectory._get_frame_attr('local_params')
+            init_ref_frames = self.h5_trajectory._get_frame_attr('ref_frames')
+            init_ori = self.h5_trajectory._get_frame_attr('origins')
+            init_prot_ori = self.h5_trajectory._get_frame_attr('prot_origins')
         else:
-            init_prot_ori = torch.empty((0,3))
+            init_local_params = self.dna_structure.dna.geom_params.local_params
+            init_ref_frames = self.dna_structure.dna.geom_params.ref_frames
+            init_ori = self.dna_structure.dna.geom_params.origins
+            if self.dna_structure.proteins:
+                init_prot_ori = torch.vstack([protein.origins for protein in self.dna_structure.proteins[::-1]])
+            else:
+                init_prot_ori = torch.empty((0,3))
         ln = init_ref_frames.shape[0]
         traj_len = self.transfer_to_memory_every+1
         dtype = init_ref_frames.dtype
@@ -124,7 +136,7 @@ class Iterator:
         r = torch.rand(1).item()
         self.total_step += 1
 
-        if (Del_E < 0 or (not(torch.isinf(torch.exp(Del_E))) and (r  <= torch.exp(-Del_E/KT)))):
+        if not Del_E.isnan() and Del_E < 0 or (not(torch.isinf(torch.exp(Del_E))) and (r  <= torch.exp(-Del_E/KT))):
             # self.energy.update_matrices(e_mat,s_mat,linker_bp_index,prot_sl_index+self.trajectory.origins_traj.shape[1])
             # self.prev_e += e_dif_components
             self.prev_e = e_cur

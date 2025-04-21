@@ -1,15 +1,20 @@
-import pytest
-#from pynamod.DNA.DNA_structure_analysis import DNA_structure_from_atomic
-#from pynamod.geometry.bp_step_geometry import rebuild_by_full_par_frame_numba
-import numpy as np
-import warnings
+import unittest
+from pynamod.geometry.geometrical_parameters import Geometrical_Parameters
 
+class Test_Runner(unittest.TestCase):
+    def test_frames_identity(self):
+        nucl = DNA_structure_from_atomic(pdb_id='3LZ0',leading_strands=['I'],proteins=[])
+        nucl.analyze_DNA()
+        nucl.move_to_coord_center()
 
-def test_frames_identity():
-    nucl = DNA_structure_from_atomic(pdb_id='3LZ0',leading_strands=['I'],proteins=[])
-    nucl.analyze_DNA()
-    nucl.move_to_coord_center()
-    exp_ref_frames = rebuild_by_full_par_frame_numba(nucl.steps_params)
-    dif = abs(exp_ref_frames - nucl.base_ref_frames)
-    assert np.mean(dif) < 10**-12
+        old_geom_params = nucl.dna.geom_params
 
+        new_params = Geometrical_Parameters(local_params = old_geom_params)
+
+        ref_dif = old_geom_params.ref_frames - new_params.ref_frames
+        assert ref_dif.abs().mean() < 10**-12
+        ori_dif = old_geom_params.origins - new_params.origins
+        assert ori_dif.abs().mean() < 10**-12
+    
+if __name__ == "__main__":
+    unittest.main()
