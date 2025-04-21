@@ -3,11 +3,8 @@ The aim of this project is to provide a set of python tools to perform modelling
 * DNA fibers
 * Protein - DNA complexes based on a set of distances
 
-In the current state a portion of 3DNA routines for dna b.p. step parameters is implemented in python.
-You can see example jupyter notebooks in the Examples folder.
-
 Installation:
-Work in progress
 
-Example of 3600 nucleosome fiber:
-![](Examples/Resources/3600_nucl_fiber.png)
+Environment can be created using attached file
+
+
