@@ -7,7 +7,7 @@ from Bio.Seq import Seq
 from tqdm.auto import tqdm
 from pynamod.energy.energy_constants import get_consts_olson_98,BDNA_step
 from pynamod.geometry.geometrical_parameters import Geometrical_Parameters
-from pynamod.atomic_analysis.nucleotides_parser import get_all_nucleotides, Nucleotide
+from pynamod.atomic_analysis.nucleotides_parser import get_all_nucleotides, Nucleotide,get_base_ref_frame
 from pynamod.atomic_analysis.pairs_parser import get_pairs, Base_Pair
 from pynamod.atomic_analysis.structures_storage import Nucleotides_Storage,Pairs_Storage
 
@@ -24,7 +24,7 @@ class DNA_Structure:
         for name,value in kwards.items():
             setattr(self,name,value)
                 
-    def build_from_u(self,leading_strands,pairs_in_structure = None,sel=None):
+    def build_from_u(self,leading_strands,pairs_in_structure = None,traj_len=1,sel=None):
         '''This method is called by CG_Structure.analyze_dna and runs full analysis of atomic structure.'''
         self.nucleotides = get_all_nucleotides(self,leading_strands,sel)
 
@@ -35,10 +35,10 @@ class DNA_Structure:
         if not self.pairs_list:
             raise TypeError('No pairs were found')
             
-        self.get_geom_params()
+        self.get_geom_params(traj_len)
         self._set_pair_params_list()
         
-    def get_geom_params(self):
+    def get_geom_params(self,traj_len=1):
         '''This method prepairs reference frames and orgins frim pairs, than creates object of All_Coords or updates existing one.'''
         ref_frames = torch.stack([pair.Rm for pair in self.pairs_list])
         
@@ -46,7 +46,7 @@ class DNA_Structure:
         if hasattr(self,'geom_params'):
             self.geom_params.get_new_params_set(ref_frames=ref_frames,origins=origins)
         else:
-            self.geom_params = Geometrical_Parameters(ref_frames=ref_frames,origins=origins)
+            self.geom_params = Geometrical_Parameters(ref_frames=ref_frames,origins=origins,traj_len = traj_len)
     
     
     def generate(self,sequence,radius=10,charge=-2,eps=0.5):
@@ -84,17 +84,29 @@ class DNA_Structure:
         self.geom_params = Geometrical_Parameters(local_params=step_params)
         self._set_pair_params_list()
     
-    def analyze_trajectory(self,u):
+    def analyze_trajectory(self,trajectory):
         '''Runs analysis of all frames in trajectory based on previously generated pairs list.'''
-        self.geom_params.test_sw = True
-        for ts in tqdm(u.trajectory):
-            self.geom_params._cur_tr_step += 1
-            for n in self.nucleotides:
-                n.get_base_ref_frame()
-            for pair in self.pairs_list:
-                pair.get_pair_params()
-            self.get_geom_params()
-        self.geom_params._cur_tr_step = 0
+        try:
+            for ts in tqdm(trajectory):
+                self.geom_params.trajectory.cur_step += 1
+
+                for i in range(len(self.nucleotides)):
+                    R,o = get_base_ref_frame(self.nucleotides.s_residues[i],self.nucleotides.e_residues[i])
+                    self.nucleotides.ref_frames[i] = R
+                    self.nucleotides.origins[i] = o
+                for pair in self.pairs_list:
+                     pair.get_pair_params()
+                self.get_geom_params()
+        except KeyboardInterrupt:
+            pass
+        step_sl = self.geom_params.trajectory.cur_step
+        self.geom_params.trajectory.origins_traj = self.geom_params.trajectory.origins_traj[:step_sl]
+        self.geom_params.trajectory.ref_frames_traj = self.geom_params.trajectory.ref_frames_traj[:step_sl]
+        self.geom_params.trajectory.local_params_traj = self.geom_params.trajectory.local_params_traj[:step_sl]
+        
+        self.geom_params.trajectory.cur_step = 0
+        
+        
     
     def append_structures(self,structures,first_step_params=torch.from_numpy(BDNA_step[6:]),copy=True):
         '''Is called by CG_Structure.append_structures and combines provided DNA structures.

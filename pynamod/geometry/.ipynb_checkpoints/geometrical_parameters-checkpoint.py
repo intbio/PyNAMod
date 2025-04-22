@@ -6,7 +6,7 @@ from pynamod.geometry.bp_step_geometry import Geometry_Functions
 from pynamod.geometry.tensor_subclasses import mod_Tensor
 
 class Geometrical_Parameters(Geometry_Functions):
-    def __init__(self,local_params = None, ref_frames = None, origins = None,trajectory=None,pair_params=False,auto_rebuild=True,empty=False):
+    def __init__(self,local_params = None, ref_frames = None, origins = None,trajectory=None,traj_len=1,pair_params=False,auto_rebuild=True,empty=False):
 
         self.pair_params = pair_params
         
@@ -27,7 +27,7 @@ class Geometrical_Parameters(Geometry_Functions):
             if isinstance(trajectory,H5_Trajectory):
                 self.auto_rebuild = False
         elif not empty:
-            self.trajectory = Tensor_Trajectory(self.dtype,1,self.len,lambda x: mod_Tensor(x,self))
+            self.trajectory = Tensor_Trajectory(self.dtype,traj_len,self.len,lambda x: mod_Tensor(x,self))
         if not empty:
             self.get_new_params_set(local_params, ref_frames, origins)
         

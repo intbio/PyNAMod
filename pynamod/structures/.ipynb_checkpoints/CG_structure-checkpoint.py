@@ -52,7 +52,7 @@ class CG_Structure:
         else:
             self.proteins = []
         
-    def analyze_dna(self,leading_strands=None,pairs_in_structure=None,sel=None):
+    def analyze_dna(self,leading_strands=None,pairs_in_structure=None,sel=None,trajectory=None):
         '''Method that runs analysis of mda Universe and trajectory if given.
         
             Arguments:
@@ -63,10 +63,12 @@ class CG_Structure:
             
             **sel**: selection string for mda Universe to choose atoms which will be included in analysis.
         '''
-        self.dna.build_from_u(leading_strands,pairs_in_structure,sel)
+        if trajectory is None:
+            trajectory = self.u.trajectory
+        self.dna.build_from_u(leading_strands,pairs_in_structure,len(trajectory),sel)
         
-        if len(self.u.trajectory) != 1:
-            self.dna.analyze_trajectory(self.u)
+        if len(trajectory) != 1:
+            self.dna.analyze_trajectory(trajectory)
             
     def build_dna(self,sequence):
         '''Method that runs generation of linear DNA structure with given sequence. Each pair of nucleotides and each step of pairs gains similar average BDNA parameters.

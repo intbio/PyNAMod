@@ -138,7 +138,7 @@ class Nucleotides_Storage(Structures_Storage):
         new = super().copy()
         new.mda_u = self.mda_u
         return new
-    
+
     
 class Pairs_Storage(Structures_Storage):
     def __init__(self,pair_class,nucleotides_storage,*stored_params):

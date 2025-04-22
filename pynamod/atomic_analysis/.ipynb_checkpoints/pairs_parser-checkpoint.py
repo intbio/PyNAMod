@@ -47,8 +47,9 @@ class Base_Pair:
         self.lead_nucl.base_pair = self.lag_nucl.base_pair = self
     
     def get_pair_params(self):
-        ori = torch.vstack([self.lead_nucl.origin,self.lag_nucl.origin])
-        r_frames = torch.stack([self.lead_nucl.ref_frame,self.lag_nucl.ref_frame])
+        lead_nucl,lag_nucl = self.lead_nucl,self.lag_nucl
+        ori = torch.vstack([lead_nucl.origin,lag_nucl.origin]).reshape(2,1,3)
+        r_frames = torch.stack([lead_nucl.ref_frame,lag_nucl.ref_frame])
 
         if self.geom_params:
             self.geom_params.get_new_params_set(ref_frames=r_frames,origins=ori)
