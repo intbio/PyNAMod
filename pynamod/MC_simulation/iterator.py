@@ -26,7 +26,7 @@ class Iterator:
         total_step_bar = tqdm(total=max_steps,desc='Steps',disable=mute)
         info_pbar = tqdm(total=100,bar_format='{l_bar}{bar}{postfix}',desc='Acceptance rate',disable=mute)
         KT = KT_factor*self.energy.KT
-        print("Starting time:",time.strftime('%D %H:%M:%S',time.localtime()))
+        print("Start time:",time.strftime('%D %H:%M:%S',time.localtime()))
         try:
             while self.total_step < max_steps and self.accepted_steps < target_accepted_steps:
                 
@@ -47,6 +47,7 @@ class Iterator:
         if self.accepted_steps >= target_accepted_steps:
             print('target accepted steps reached')
         print("Finish time:",time.strftime('%D %H:%M:%S',time.localtime()))
+        print('it/s:', '%.2f'%total_step_bar(format_dict["rate"]))
         print('accepted steps:',self.accepted_steps)
         print('total steps:',self.total_step)
     
@@ -94,10 +95,10 @@ class Iterator:
     
     def _create_tens_trajectory(self,start_from_traj):
         if start_from_traj:
-            init_local_params = self.h5_trajectory._get_frame_attr('local_params')
-            init_ref_frames = self.h5_trajectory._get_frame_attr('ref_frames')
-            init_ori = self.h5_trajectory._get_frame_attr('origins')
-            init_prot_ori = self.h5_trajectory._get_frame_attr('prot_origins')
+            init_local_params = torch.from_numpy(self.h5_trajectory._get_frame_attr('local_params'))
+            init_ref_frames = torch.from_numpy(self.h5_trajectory._get_frame_attr('ref_frames'))
+            init_ori = torch.from_numpy(self.h5_trajectory._get_frame_attr('origins'))
+            init_prot_ori = torch.from_numpy(self.h5_trajectory._get_frame_attr('prot_origins'))
         else:
             init_local_params = self.dna_structure.dna.geom_params.local_params
             init_ref_frames = self.dna_structure.dna.geom_params.ref_frames
