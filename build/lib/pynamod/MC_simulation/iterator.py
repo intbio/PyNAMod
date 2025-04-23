@@ -47,7 +47,7 @@ class Iterator:
         if self.accepted_steps >= target_accepted_steps:
             print('target accepted steps reached')
         print("Finish time:",time.strftime('%D %H:%M:%S',time.localtime()))
-        print('it/s:', '%.2f'%total_step_bar(format_dict["rate"]))
+        print('it/s:', '%.2f'%total_step_bar.format_dict["rate"])
         print('accepted steps:',self.accepted_steps)
         print('total steps:',self.total_step)
     

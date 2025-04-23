@@ -64,8 +64,8 @@ class CG_Structure:
             **sel**: selection string for mda Universe to choose atoms which will be included in analysis.
         '''
         if trajectory is None:
-            trajectory = self.u.trajectory
-        self.dna.build_from_u(leading_strands,pairs_in_structure,len(trajectory),sel)
+            trajectory = self.u.trajectory[1:]
+        self.dna.build_from_u(leading_strands,pairs_in_structure,len(trajectory)+1,sel)
         
         if len(trajectory) != 1:
             self.dna.analyze_trajectory(trajectory)
