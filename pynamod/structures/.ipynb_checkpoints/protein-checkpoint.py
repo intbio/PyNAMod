@@ -50,7 +50,7 @@ class Protein:
         group.create_dataset('radii',data=self.radii,**dataset_kwards)
         group.create_dataset('masses',data=self.masses,**dataset_kwards)
         group.create_dataset('eps',data=self.eps,**dataset_kwards)
-        group.create_dataset('supdata',data=[self.n_cg_beads,self.ref_pair.ind],**dataset_kwards)
+        group.create_dataset('supdata',data=[self.n_cg_beads,self.ref_pair.ind,self.binded_dna_len],**dataset_kwards)
         
     def load_from_h5(self,file,group_name='protein_0_CG_parameters'):
         self.ref_vectors = torch.from_numpy(file[group_name]['ref_vectors'][:]).to(torch.double)
@@ -59,6 +59,7 @@ class Protein:
         self.masses = torch.from_numpy(file[group_name]['masses'][:])
         self.eps = torch.from_numpy(file[group_name]['eps'][:])
         self.n_cg_beads = int(file[group_name]['supdata'][0])
+        self.binded_dna_len = int(file[group_name]['supdata'][2])
         return int(file[group_name]['supdata'][1])
         
     def get_true_pos(self,dna_structure=None,ref_om=None,ref_Rm=None):
@@ -71,7 +72,8 @@ class Protein:
     def copy(self):
         return Protein(mdaUniverse=self.u,n_cg_beads=self.n_cg_beads,ref_pair = self.ref_pair,
                       eps=self.eps.clone(),ref_vectors = self.ref_vectors.clone(),
-                      radii = self.radii.clone(),charges = self.charges.clone(),masses = self.masses.clone(),cg_structure=self.cg_structure)
+                      radii = self.radii.clone(),charges = self.charges.clone(),masses = self.masses.clone(),cg_structure=self.cg_structure,
+                      binded_dna_len=self.binded_dna_len)
     
     def to(self,device):
         self.charges = self.charges.to(device)

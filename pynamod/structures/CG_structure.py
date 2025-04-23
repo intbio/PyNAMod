@@ -67,7 +67,7 @@ class CG_Structure:
             trajectory = self.u.trajectory[1:]
         self.dna.build_from_u(leading_strands,pairs_in_structure,len(trajectory)+1,sel)
         
-        if len(trajectory) != 1:
+        if len(trajectory) != 0:
             self.dna.analyze_trajectory(trajectory)
             
     def build_dna(self,sequence):
@@ -97,7 +97,7 @@ class CG_Structure:
                 i += 1
             except KeyError:
                 break
-    def analyze_protein(self,protein_u=None,n_cg_beads=50,ref_index=None):
+    def analyze_protein(self,protein_u=None,n_cg_beads=50,ref_index=None,binded_dna_len=None):
         '''Method that finds protein structure in given mda Universe or Universe attached to the instance of class. Coarse Grained structure is than constructed based on protein and added to the proteins list.
         
             Arguments:
@@ -113,8 +113,11 @@ class CG_Structure:
         if protein_u is None:
             protein_u = self.u.select_atoms('protein')
             protein_u = protein_u[protein_u.altLocs == '']
+            
+        if binded_dna_len is None:
+            binded_dna_len = len(self.dna.pairs_list)
         
-        new = Protein(protein_u,n_cg_beads=n_cg_beads,ref_pair = self.dna.pairs_list[ref_index])
+        new = Protein(protein_u,n_cg_beads=n_cg_beads,ref_pair = self.dna.pairs_list[ref_index],binded_dna_len=binded_dna_len)
         new.cg_structure = self
         new.build_model()
         self.proteins.append(new)

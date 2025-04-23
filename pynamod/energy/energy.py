@@ -36,7 +36,7 @@ class Energy:
             self.real_space_energy_func = self._get_real_space_softmax_energy
         
     
-    def set_energy_matrices(self,CG_structure,ignore_neighbors=5,set_dist_mat_sl=True):
+    def set_energy_matrices(self,CG_structure,ignore_neighbors=5,ignore_protein_neigbors=8,set_dist_mat_sl=True):
         '''Creates matrices for energy calculation.
         
             Attributes:
@@ -47,6 +47,7 @@ class Energy:
         AVERAGE,FORCE_CONST,DISP = get_consts_olson_98()
         pairtypes = [pair.pair_name for pair in CG_structure.dna.pairs_list]
         self.ignore_neighbors = ignore_neighbors
+        self.ignore_protein_neigbors = ignore_protein_neigbors
         if set_dist_mat_sl:
             self._set_dist_mat_slice(CG_structure)
         self._set_matrix(pairtypes,'force_matrix',FORCE_CONST)
@@ -186,6 +187,15 @@ class Energy:
         for protein in CG_structure.proteins[::-1]:
             stop = protein.n_cg_beads+start
             self.dist_mat_slice[0:start,start:stop] = True
+            ref_ind = protein.ref_pair.ind
+            offset = protein.binded_dna_len // 2 + self.ignore_protein_neigbors
+            low = ref_ind-offset
+            if low < 0:
+                low = 0
+            high = ref_ind + offset
+            if high > self.dist_mat_slice.shape[0]:
+                high = self.dist_mat_slice.shape[0]
+            self.dist_mat_slice[low:high,start:stop] = False
             start = stop
         
     def _triform(self,square_mat):
