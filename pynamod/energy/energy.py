@@ -120,15 +120,13 @@ class Energy:
         
         radii_sum_prod = self._get_matr_slices(self.radii_sum_prod,change_index,prot_sl_index)
         radii_sum_prod = torch.vstack([radii_sum_prod[0],radii_sum_prod[1].T])
-        epsilon_mean_prod = self._get_matr_slices(self.epsilon_mean_prod,change_index,prot_sl_index)
-        epsilon_mean_prod = torch.vstack([epsilon_mean_prod[0],epsilon_mean_prod[1].T])
         charges_multipl_prod = self._get_matr_slices(self.charges_multipl_prod,change_index,prot_sl_index)
         charges_multipl_prod = torch.vstack([charges_multipl_prod[0],charges_multipl_prod[1].T])
             
         electrostatic1 = self._get_matr_slices(self.es_en_mat,change_index,prot_sl_index)
-        electrostatic1 = electrostatic1[0].sum() + electrostatic1[1].sum()
+        electrostatic1 = (electrostatic1[0].sum() + electrostatic1[1].sum())*self.K_elec
         spatial1 = self._get_matr_slices(self.sp_en_mat,change_index,prot_sl_index)
-        spatial1 = spatial1[0].sum() + spatial1[1].sum()
+        spatial1 = (spatial1[0].sum() + spatial1[1].sum())*self.K_free
         
         elastic1 = prev_e[0]
         restraint1 = prev_e[3]
@@ -139,7 +137,7 @@ class Energy:
         #return dist_matrix
         
         elastic2 = self._get_elastic_energy(cur_params_storage.local_params)
-        electrostatic2,spatial2,e_mat,s_mat = self._get_real_space_slice_energy(dist_matrix,radii_sum_prod,epsilon_mean_prod,charges_multipl_prod)
+        electrostatic2,spatial2,e_mat,s_mat = self._get_real_space_slice_energy(dist_matrix,radii_sum_prod,charges_multipl_prod)
         restraint2 = self._get_restraint_energy(cur_params_storage)
         return (elastic2-elastic1,electrostatic2-electrostatic1,spatial2-spatial1,restraint2-restraint1),e_mat,s_mat
     
@@ -228,6 +226,7 @@ class Energy:
             self.es_en_mat[self.dist_mat_slice] = e_mat
             self.sp_en_mat = torch.zeros(square_mat_ln,square_mat_ln,dtype=s_mat.dtype,device=s_mat.device)
             self.sp_en_mat[self.dist_mat_slice] = s_mat
+            
         return es,sp
     
     def _get_real_space_softmax_energy(self,origins,*args,**kwards):
