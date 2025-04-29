@@ -4,10 +4,11 @@ import pypdb
 import nglview as nv
 import torch
 import numpy as np
+import matplotlib as mpl
 from MDAnalysis.topology.guessers import guess_atom_element
 from MDAnalysis.coordinates.memory import MemoryReader
 from MDAnalysis.analysis import align
-
+import matplotlib.pyplot as plt
 from pynamod.structures.DNA_structure import DNA_Structure
 from pynamod.structures.protein import Protein
 
@@ -170,7 +171,7 @@ class CG_Structure:
         return u
 
     
-    def view_structure(self,prot_color=[0,0,1],dna_color=[0.6,0.6,0.6]):
+    def view_structure(self,max_charge=None):
         '''Method for visualization of current CG structure
             
             Arguments:
@@ -181,11 +182,25 @@ class CG_Structure:
             '''
         view=nv.NGLWidget()
         dna_len = self.dna.origins.shape[0]
+        fig = plt.figure()
+        ax = fig.add_axes([0.05, 0.80, 0.9, 0.1])
+        all_charges = self.charges
+        if not max_charge:
+            max_charge = all_charges.abs().max().ceil().item()
+        norm = mpl.colors.Normalize(-max_charge, max_charge)
+        cb = mpl.colorbar.Colorbar(ax, orientation='horizontal', 
+                                       cmap='bwr_r',
+                                       norm=norm,
+                                       label='charge',
+                                       ticks=[-max_charge,0,max_charge])
+        colors = np.array([cb.cmap(norm(c))[:3] for c in self.dna.charges.reshape(-1)]).flatten().tolist()
+        
         view.shape.add_buffer('sphere',position=self.dna.origins.flatten().tolist(),
-                                  color=dna_color*dna_len,radius=self.dna.pairs_list.radii)
+                                  color=colors,radius=self.dna.pairs_list.radii)
         for protein in self.proteins:
+            colors = np.array([cb.cmap(norm(c))[:3] for c in protein.charges]).flatten().tolist()
             view.shape.add_buffer('sphere',position=protein.origins.flatten().tolist(),
-                                  color=prot_color*protein.n_cg_beads,radius=protein.radii.tolist())
+                                  color=colors,radius=protein.radii.tolist())
 
         return view    
 

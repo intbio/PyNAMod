@@ -69,6 +69,12 @@ class H5_Trajectory(Trajectory):
                 self._create_frame(i)
         elif mode == 'r':
             self._last_frame_ind = len(self.file)
+            
+        elif mode == 'r+':
+            self._last_frame_ind = self.cur_step = init_ln = len(self.file) - 1
+            for i in range(1,initial_len+1):
+                self._create_frame(init_ln+i)
+            
 
     
     def add_frame(self,step,**attrs):

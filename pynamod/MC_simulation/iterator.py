@@ -109,7 +109,17 @@ class Iterator:
             init_local_params = torch.from_numpy(self.h5_trajectory._get_frame_attr('local_params'))
             init_ref_frames = torch.from_numpy(self.h5_trajectory._get_frame_attr('ref_frames'))
             init_ori = torch.from_numpy(self.h5_trajectory._get_frame_attr('origins'))
-            init_prot_ori = torch.from_numpy(self.h5_trajectory._get_frame_attr('prot_origins'))
+            if self.dna_structure.proteins:
+                init_prot_ori = []
+                for protein in self.dna_structure.proteins[::-1]:
+                    dtype = protein.ref_vectors.dtype
+                    ref_ind = protein.ref_pair.ind
+                    ref_rm = init_ref_frames[ref_ind].to(dtype)
+                    ref_om = init_ori[ref_ind].to(dtype)
+                    init_prot_ori.append(protein.get_true_pos(ref_om=ref_om,ref_Rm=ref_rm))
+                init_prot_ori = torch.vstack(init_prot_ori)
+            else:
+                init_prot_ori = torch.empty((0,3))            
         else:
             init_local_params = self.dna_structure.dna.geom_params.local_params
             init_ref_frames = self.dna_structure.dna.geom_params.ref_frames
@@ -118,6 +128,7 @@ class Iterator:
                 init_prot_ori = torch.vstack([protein.origins for protein in self.dna_structure.proteins[::-1]])
             else:
                 init_prot_ori = torch.empty((0,3))
+                
         init_total_ori = torch.vstack([init_ori,init_prot_ori])
         ln = init_ref_frames.shape[0]
         traj_len = self.transfer_to_memory_every+1
@@ -125,8 +136,8 @@ class Iterator:
         prot_origins_ln = init_prot_ori.shape[0]
 
         self.trajectory = Integrator_Trajectory(self.dna_structure.proteins,dtype,traj_len,ln)
-        self.trajectory.origins,self.trajectory.ref_frames = init_total_ori,init_ref_frames
-        self.trajectory.local_params = init_local_params
+        self.trajectory.origins,self.trajectory.ref_frames = init_total_ori.to(torch.double),init_ref_frames.to(torch.double)
+        self.trajectory.local_params = init_local_params.to(torch.double)
         if hasattr(self,'h5_trajectory'):
             self.h5_trajectory._set_frame_attr('origins',init_ori)
             self.h5_trajectory._set_frame_attr('ref_frames',init_ref_frames)

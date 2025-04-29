@@ -132,7 +132,7 @@ class Energy:
         restraint1 = prev_e[3]
         
         
-        dist_matrix = self._cdist(static_origins,rotated_origins)
+        dist_matrix = torch.cdist(static_origins.reshape(-1,3),rotated_origins.reshape(-1,3))
         
         #return dist_matrix
         
@@ -243,8 +243,8 @@ class Energy:
         return e_mat.sum()*self.K_elec,e_mat
 
     def _get_spatial_e(self,dist_matrix,radii_sum_prod):
-        comp = (radii_sum_prod/dist_matrix)**6
-        s_mat = (comp**2 - comp)*self.eps
+        comp = (radii_sum_prod/dist_matrix).pow(6)
+        s_mat = comp.pow(2).sub(comp)*self.eps
         return s_mat.sum()*self.K_free,s_mat
 
 
