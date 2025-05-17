@@ -9,7 +9,7 @@ import numpy as np
 import time
 from pynamod.geometry.trajectories import H5_Trajectory
 
-file = h5py.File('NCP_with_tails_bluepr.h5','r')
+file = h5py.File('NCP_with_tails.h5','r')
 results = {}
 for i in range(5,31,5):
 
