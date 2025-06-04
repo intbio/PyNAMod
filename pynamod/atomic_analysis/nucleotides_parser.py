@@ -152,7 +152,7 @@ class Nucleotide:
     def copy(self):
         return Nucleotide(self.restype, self.resid, self.segid, self.leading_strand,self.ref_frame.clone(),self.origin.clone(), self.s_residue, self.e_residue)
     
-    def __setter(self,value,attr):
+    def __setter(self,attr,value):
         getattr(self.storage_class,self.storage_class.get_name(attr))[self.ind] = value
         
     def __getter(self,attr):
@@ -167,7 +167,7 @@ class Nucleotide:
     resid = __set_property('resid')
     segid = __set_property('segid')
     leading_strand = __set_property('leading_strand')
-    base_pair = __set_property('base_pair')   
+
     
     @property
     def origin(self):

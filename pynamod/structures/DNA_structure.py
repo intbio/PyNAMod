@@ -29,10 +29,10 @@ class DNA_Structure:
         self.nucleotides = get_all_nucleotides(self,leading_strands,sel)
 
         if pairs_in_structure is not None:
-            self.pairs_list = self.parse_pairs(pairs_in_structure)
+            self.parse_pairs(pairs_in_structure)
         else:
             self.pairs_list = get_pairs(self)
-        if not self.pairs_list:
+        if len(self.pairs_list) == 0:
             raise TypeError('No pairs were found')
             
         self.get_geom_params(traj_len,overwrite_existing_dna)
@@ -191,10 +191,17 @@ class DNA_Structure:
     
     def parse_pairs(self,pairs_in_structure):
         '''Is called in analyze_dna method if list of pairs is provided. Creates a pair list based on given information.'''
-        self.pairs_list = []
+        self.pairs_list = Pairs_Storage(Base_Pair,self.nucleotides)
         for pair_data in pairs_in_structure:
             resid1,segid1,resid2,segid2 = pair_data
-            nucl1 = self.nucleotides[self.nucleotides.segids==segid1]
+            nucl1 = self.nucleotides[[s==segid1 and r==resid1 for s,r in zip(self.nucleotides.segids,self.nucleotides.resids)]]
+            
+            nucl2 = self.nucleotides[[s==segid2 and r==resid2 for s,r in zip(self.nucleotides.segids,self.nucleotides.resids)]]
+            
+            new_base_pair = Base_Pair(self.pairs_list,
+                                      lead_nucl=nucl1, lag_nucl=nucl2)
+            new_base_pair.get_pair_params()
+
 
     def save_to_h5(self,file,**dataset_kwards):
         

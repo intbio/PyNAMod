@@ -6,7 +6,7 @@ from pynamod.geometry.tensor_subclasses import mod_Tensor,Origins_Tensor
 
 class Trajectory:
     '''Class that processes trajectories of given parameters. It stores created trajectories for each given parameter and link to the class with current step of trajectories (could be self). All parameters are then should be defined as property using get_property_from_tr.'''
-    def __init__(self,traj_len,data_len,attrs_names):
+    def __init__(self,attrs_names):
         self.attrs_names = ['origins','ref_frames','local_params']
         if attrs_names:
             self.attrs_names += attrs_names
@@ -20,7 +20,7 @@ class Tensor_Trajectory(Trajectory):
         self.traj_class = traj_class
         if shapes:
             self.shapes += shapes
-        super().__init__(traj_len,data_len,attrs_names)
+        super().__init__(attrs_names)
         for shape,attr in zip(self.shapes,self.attrs_names):
             setattr(self,f'{attr}_traj',traj_class(torch.zeros(*shape,dtype=dtype)))
                 
@@ -54,26 +54,23 @@ class Tensor_Trajectory(Trajectory):
         
 
 class H5_Trajectory(Trajectory):
-    def __init__(self,filename,initial_len,data_len,mode='w',attrs_names=None,shapes=None,string_format_val=5,**kwards):
+    def __init__(self,filename,data_len,mode='r',attrs_names=None,shapes=None,string_format_val=5,**kwards):
         if shapes:
             self.shapes = shapes
         else:
             self.shapes = [(data_len,1,3),(data_len,3,3),(data_len,6)]
-        super().__init__(initial_len,data_len,attrs_names)
+        super().__init__(attrs_names)
         self.file = h5py.File(filename,mode)
         self._dataset_kwards = kwards
         self.string_format_val = string_format_val
         if mode == 'w':
             self._last_frame_ind = -1
-            for i in range(initial_len):
-                self._create_frame(i)
+
         elif mode == 'r':
-            self._last_frame_ind = len(self.file)
+            self._last_frame_ind = len(self.file) - 1
             
         elif mode == 'r+':
-            self._last_frame_ind = self.cur_step = init_ln = len(self.file) - 1
-            for i in range(1,initial_len+1):
-                self._create_frame(init_ln+i)
+            self._last_frame_ind = self.cur_step = len(self.file) - 1
             
 
     

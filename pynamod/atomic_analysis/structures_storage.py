@@ -45,41 +45,68 @@ class Structures_Storage:
     def get_name(self,attr):
         return attr + 's' if not attr[-2:] == 'us' else attr[:-2] + 'i' 
             
-            
+    
+    def __sl_isintance(self,sl_value,classes):
+        return isinstance(sl_value,classes) or (isinstance(sl_value,torch.Tensor) and isinstance(sl_value.item(),classes))
+    
     def __getitem__(self,sl):
-
-        try:
-            item_attrs = []
-            for attr in self.structure_attrs_list:
-                if isinstance(sl[0],bool):
-                    item = [getattr(self,self.get_name(attr))[i] for i,bl in enumerate(sl) if bl]
-                else:
-                    item = [getattr(self,self.get_name(attr))[i] for i in sl]
-                if isinstance(item[0],torch.Tensor):
-                    item = torch.cat([i.reshape(1,*i.shape) for i in item])
-                item_attrs.append(item)
-                    
-        except TypeError or IndexError:
-            item_attrs = []
-            for attr in self.structure_attrs_list:
-                item = getattr(self,self.get_name(attr))
-                if isinstance(item,torch.Tensor) and isinstance(sl,slice) and (sl.step and sl.step < 0):
-                    item = torch.flip(item,(0,))
-                    tens_sl = slice(sl.start,sl.stop,sl.step*-1)
-                    item = item[tens_sl]
-                else:
-                    item = item[sl]
-                item_attrs.append(item)
-            
-        if isinstance(sl,int) or isinstance(sl,np.int64):
+        
+        if isinstance(sl,(int,np.integer)):
             return self.structure_class(self,ind=sl)
-        return type(self)(self.structure_class,self.structure_attrs_list,*item_attrs)
+        
+        if isinstance(sl,(slice,list,np.ndarray,torch.Tensor)):
+            item_attrs = []
+            if isinstance(sl,slice):
+
+                for attr in self.structure_attrs_list:
+                    item = getattr(self,self.get_name(attr))[sl]
+                    item_attrs.append(item)
+                    
+            elif self.__sl_isintance(sl[0],(bool,np.bool_)):
+                
+                for attr in self.structure_attrs_list:
+                    attr_val = getattr(self,self.get_name(attr))
+                    
+                    if isinstance(attr_val,torch.Tensor):
+                        item = attr_val[sl]
+                    else:
+                        item = [attr_val[i] for i,bl in enumerate(sl) if bl]
+                        
+                    item_attrs.append(item)
+                    
+            elif self.__sl_isintance(sl[0],(int,np.integer)):
+                
+                for attr in self.structure_attrs_list:
+                    attr_val = getattr(self,self.get_name(attr))
+                    if isinstance(attr_val,torch.Tensor):
+                        item = attr_val[sl]
+                    else:
+                        item = [attr_val[i] for i in sl]
+                    item_attrs.append(item)
+
+
+
+                    
+            if len(item_attrs[0]) == 1:
+                if len(sl) == 1:
+                    return self.structure_class(self,ind=sl[0])
+                elif sum(sl) == 1:
+                    return self.structure_class(self,ind=np.argwhere(sl)[0][0])
+            
+            
+            return type(self)(self.structure_class,self.structure_attrs_list,*item_attrs)    
+        
+        raise IndexError('Wrong slice format')
+    
+    def __iter__(self):
+        for i in range(len(self)):
+            yield self[i]
     
     def __add__(self,other):
         for attr in self.structure_attrs_list:
+
             self_attr = getattr(self,self.get_name(attr))
             other_attr = getattr(other,self.get_name(attr))
-
             if isinstance(self_attr,torch.Tensor):
                 setattr(self,self.get_name(attr),torch.cat([self_attr,other_attr]))
             else:
@@ -89,7 +116,7 @@ class Structures_Storage:
         return self
     
     def __len__(self):
-        return len(getattr(self,self.structure_attrs_list[0]+'s'))
+        return len(getattr(self,self.get_name(self.structure_attrs_list[0])))
     
     
     def save_to_h5(self,file,group_name,**dataset_kwards):
@@ -128,9 +155,9 @@ class Structures_Storage:
 class Nucleotides_Storage(Structures_Storage):
     def __init__(self,nucleotide_class,u,*stored_params):
         self.mda_u = u
-        structure_attrs_list = ['restype', 'resid', 'segid','leading_strand','ref_frame','origin','s_residue', 'e_residue','base_pair']
+        structure_attrs_list = ['restype', 'resid', 'segid','leading_strand','ref_frame','origin','s_residue', 'e_residue']
         if not stored_params:
-            stored_params = [[],[],[],[],torch.empty(0,3,3,dtype=torch.double),torch.empty(0,1,3,dtype=torch.double),[],[],[]]
+            stored_params = [[],[],[],[],torch.empty(0,3,3,dtype=torch.double),torch.empty(0,1,3,dtype=torch.double),[],[]]
             
         super().__init__(nucleotide_class,structure_attrs_list,*stored_params)
         
