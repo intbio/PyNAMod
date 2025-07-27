@@ -1,21 +1,31 @@
-import networkx as nx
-from MDAnalysis.topology.guessers import guess_atom_element
+import io
+import warnings
+
 import MDAnalysis as mda
+import networkx as nx
 import numpy as np
 import torch
-from scipy.spatial.distance import cdist
+from MDAnalysis.topology.guessers import guess_atom_element
 from more_itertools import pairwise
-import io
+from scipy.spatial.distance import cdist
 from scipy.spatial.transform import Rotation as R
+
 from pynamod.atomic_analysis.base_structures import nucleotides_pdb
 from pynamod.atomic_analysis.structures_storage import Nucleotides_Storage
 
+warnings.filterwarnings("ignore", category=DeprecationWarning)
+warnings.filterwarnings(
+    'ignore',
+    message='Element information is missing, elements attribute will not be populated.*',
+    category=UserWarning
+)
 
 
 def get_base_u(base_type):
     base_u = mda.Universe(io.StringIO(nucleotides_pdb[base_type]), format='PDB')
     base_u.add_TopologyAttr('elements', [guess_atom_element(name) for name in base_u.atoms.names])
     return base_u.select_atoms('not name ORI')
+
 
 def build_graph(mda_structure, d_threshold=1.6):
     '''
@@ -34,14 +44,14 @@ def build_graph(mda_structure, d_threshold=1.6):
     nx.set_node_attributes(graph, nodes_names)
     return graph
 
+
 base_graphs = {}
 for base in ['A', 'T', 'G', 'C', 'U']:
     mda_str = get_base_u(base)
-    base_graphs[base] = build_graph(mda_str)
+    base_only_atoms = mda_str.select_atoms(
+        "not name P and not name O1P and not name O2P and not name O5' and not name C5' and not name C4' and not name O4' and not name C3' and not name O3' and not name C2' and not name C1'")
+    base_graphs[base] = build_graph(base_only_atoms)
 atoms_to_exclude = {'A': [5], 'T': [2, 5, 8], 'G': [5, 8], 'C': [2, 5], 'U': []}
-
-
-    
 
 
 def _check_atom_name(node1, node2):
@@ -51,14 +61,7 @@ def _check_atom_name(node1, node2):
     return node1['el'] == node2['el']
 
 
-base_graphs = {}
-for base in ['A', 'T', 'G', 'C', 'U']:
-    mda_str = mda.Universe(io.StringIO(nucleotides_pdb[base]), format='PDB')
-    mda_str.add_TopologyAttr('elements', [guess_atom_element(name) for name in mda_str.atoms.names])
-    base_graphs[base] = build_graph(mda_str.select_atoms('not name ORI'))
-atoms_to_exclude = {'A': [5], 'T': [2, 5, 8], 'G': [5, 8], 'C': [2, 5], 'U': []}
-
-def get_base_ref_frame(s_res,e_res):
+def get_base_ref_frame(s_res, e_res):
     '''
     Calculate R frame and origin with the same algorithm as in 3dna.
     -----
@@ -90,13 +93,13 @@ def get_base_ref_frame(s_res,e_res):
 
     q0, q1, q2, q3 = q
     R = torch.DoubleTensor([[q0 * q0 + q1 * q1 - q2 * q2 - q3 * q3, 2 * (q1 * q2 - q0 * q3), 2 * (q1 * q3 + q0 * q2)],
-                       [2 * (q2 * q1 + q0 * q3), q0 * q0 - q1 * q1 + q2 * q2 - q3 * q3, 2 * (q2 * q3 - q0 * q1)],
-                       [2 * (q3 * q1 - q0 * q2), 2 * (q3 * q2 + q0 * q1), q0 * q0 - q1 * q1 - q2 * q2 + q3 * q3]])
+                            [2 * (q2 * q1 + q0 * q3), q0 * q0 - q1 * q1 + q2 * q2 - q3 * q3, 2 * (q2 * q3 - q0 * q1)],
+                            [2 * (q3 * q1 - q0 * q2), 2 * (q3 * q2 + q0 * q1), q0 * q0 - q1 * q1 - q2 * q2 + q3 * q3]])
     o = torch.DoubleTensor(e_ave - (s_ave*R).sum(axis=1))
-    return R,o
+    return R, o
 
 
-def check_if_nucleotide(residue, base_graphs=base_graphs,candidates = ['G', 'T', 'A', 'C', 'U']):
+def check_if_nucleotide(residue, base_graphs=base_graphs, candidates=['G', 'T', 'A', 'C', 'U']):
     # tune speed
     '''
     Find if residue of pdb structure is nucleotide and get it type.
@@ -134,84 +137,76 @@ def check_if_nucleotide(residue, base_graphs=base_graphs,candidates = ['G', 'T',
     return exp_sel, stand_sel, true_base
 
 
-
-
 class Nucleotide:
-    def __init__(self,storage_class, ind):
+    def __init__(self, storage_class, ind):
         self.storage_class = storage_class
         self.ind = ind
-
 
     def __lt__(self, other):
         if self.leading_strand != other.leading_strand:
             return self.leading_strand > other.leading_strand
         else:
             return self.resid < other.resid
-    
-        
+
     def copy(self):
-        return Nucleotide(self.restype, self.resid, self.segid, self.leading_strand,self.ref_frame.clone(),self.origin.clone(), self.s_residue, self.e_residue)
-    
-    def __setter(self,attr,value):
-        getattr(self.storage_class,self.storage_class.get_name(attr))[self.ind] = value
-        
-    def __getter(self,attr):
-        return getattr(self.storage_class,self.storage_class.get_name(attr))[self.ind]
-        
+        return Nucleotide(self.restype, self.resid, self.segid, self.leading_strand, self.ref_frame.clone(), self.origin.clone(), self.s_residue, self.e_residue)
+
+    def __setter(self, attr, value):
+        getattr(self.storage_class, self.storage_class.get_name(attr))[self.ind] = value
+
+    def __getter(self, attr):
+        return getattr(self.storage_class, self.storage_class.get_name(attr))[self.ind]
+
     def __set_property(attr):
-        setter = lambda self,value: self.__setter(value,attr=attr)
-        getter = lambda self: self.__getter(attr=attr)
-        return property(fset=setter,fget=getter)
-        
+        def setter(self, value): return self.__setter(value, attr=attr)
+        def getter(self): return self.__getter(attr=attr)
+        return property(fset=setter, fget=getter)
+
     restype = __set_property('restype')
     resid = __set_property('resid')
     segid = __set_property('segid')
     leading_strand = __set_property('leading_strand')
 
-    
     @property
     def origin(self):
         value = self.__getter('origin')
         if value is None:
-            R,o = get_base_ref_frame(self.s_residue,self.e_residue)
-            self.__setter('ref_frame',R)
-            self.__setter('origin',o)
+            R, o = get_base_ref_frame(self.s_residue, self.e_residue)
+            self.__setter('ref_frame', R)
+            self.__setter('origin', o)
             value = o
         return value
-    
+
     @origin.setter
-    def origin(self,value):
-        self.__setter('origin',value)
-        
+    def origin(self, value):
+        self.__setter('origin', value)
+
     @property
     def ref_frame(self):
         value = self.__getter('ref_frame')
         if value is None:
-            R,o = get_base_ref_frame(self.s_residue,self.e_residue)
-            self.__setter('ref_frame',R)
-            self.__setter('origin',o)
+            R, o = get_base_ref_frame(self.s_residue, self.e_residue)
+            self.__setter('ref_frame', R)
+            self.__setter('origin', o)
             value = R
         return value
-    
+
     @ref_frame.setter
-    def ref_frame(self,value):
-        self.__setter('ref_frame',value)
-        
-    
-        
+    def ref_frame(self, value):
+        self.__setter('ref_frame', value)
+
     @property
     def s_residue(self):
         value = self.__getter('s_residue')
         if value is None:
             value = get_base_u(self.restype)
-            self.__setter('s_residue',value)
+            self.__setter('s_residue', value)
         return value
-    
+
     @s_residue.setter
-    def s_residue(self,value):
-        self.__setter('s_residue',value)
-        
-        
+    def s_residue(self, value):
+        self.__setter('s_residue', value)
+
     @property
     def e_residue(self):
         value = self.__getter('e_residue')
@@ -220,19 +215,18 @@ class Nucleotide:
                 u = self.storage_class.mda_u.select_atoms(f'resid {self.resid} and segid {self.segid}')
             else:
                 u = get_base_u(self.restype)
-                
-            exp_sel, stand_sel, _ = check_if_nucleotide(residue,candidates=[self.restype])
-            self.__setter('s_residue',sum(stand_sel))
-            self.__setter('e_residue',sum(exp_sel))
+
+            exp_sel, stand_sel, _ = check_if_nucleotide(residue, candidates=[self.restype])
+            self.__setter('s_residue', sum(stand_sel))
+            self.__setter('e_residue', sum(exp_sel))
             value = exp_sel
-    
+
         return value
-    
+
     @e_residue.setter
-    def e_residue(self,value):
-        self._setter('e_residue',value)
-        
-        
+    def e_residue(self, value):
+        self._setter('e_residue', value)
+
     @property
     def next_nucleotide(self):
         ind = self.storage_class.e_residues.index(self.e_residue) + 1
@@ -251,11 +245,9 @@ class Nucleotide:
 
     def __repr__(self):
         return f'<Nucleotide with type {self.restype}, resid {self.resid} and segid {self.segid}>'
-    
-        
 
-        
-def get_all_nucleotides(DNA_Structure,leading_strands,sel):
+
+def get_all_nucleotides(DNA_Structure, leading_strands, sel):
     '''
     Create data frame with data about nucleotides from a given pdb.
     -----
@@ -265,7 +257,7 @@ def get_all_nucleotides(DNA_Structure,leading_strands,sel):
     base_graphs - dictionary of graphs which represent 5 nucleotides
     nucleotides_df - result data frame
     '''
-    nucleotides_data = Nucleotides_Storage(Nucleotide,DNA_Structure.u)
+    nucleotides_data = Nucleotides_Storage(Nucleotide, DNA_Structure.u)
     if sel:
         sel = DNA_Structure.u.select_atoms(sel)
     else:
@@ -277,9 +269,27 @@ def get_all_nucleotides(DNA_Structure,leading_strands,sel):
             exp_sel, stand_sel, base = check_if_nucleotide(residue_str)
             if base != '':
                 leading_strand = residue.segid in leading_strands
-                R,o = get_base_ref_frame(sum(stand_sel),sum(exp_sel))
-                nucleotides_data.append(base, residue.resid, residue.segid, leading_strand,R,o.reshape(1,3),sum(stand_sel),sum(exp_sel),None)
-                
-    nucleotides_data.sort('leading_strand','resid')
-    nucleotides_data = nucleotides_data[nucleotides_data.leading_strands] + nucleotides_data[[not i for i in nucleotides_data.leading_strands]]
+                R, o = get_base_ref_frame(sum(stand_sel), sum(exp_sel))
+                nucleotides_data.append(base, residue.resid, residue.segid, leading_strand, R, o.reshape(1, 3), sum(stand_sel), sum(exp_sel), None)
+
+    nucleotides_data.sort('leading_strand', 'resid')
+    if len(nucleotides_data) == 0:
+        return nucleotides_data
+
+    # Handle the case where slicing might return single objects
+    leading_result = nucleotides_data[nucleotides_data.leading_strands]
+    lagging_result = nucleotides_data[[not i for i in nucleotides_data.leading_strands]]
+
+    # Ensure both results are Nucleotides_Storage objects
+    if not isinstance(leading_result, Nucleotides_Storage):
+        new_leading = Nucleotides_Storage(Nucleotide, nucleotides_data.mda_u)
+        new_leading.append(leading_result)
+        leading_result = new_leading
+
+    if not isinstance(lagging_result, Nucleotides_Storage):
+        new_lagging = Nucleotides_Storage(Nucleotide, nucleotides_data.mda_u)
+        new_lagging.append(lagging_result)
+        lagging_result = new_lagging
+
+    nucleotides_data = leading_result + lagging_result
     return nucleotides_data

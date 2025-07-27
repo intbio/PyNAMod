@@ -4,12 +4,10 @@ channels:
   - conda-forge
   - nvidia
   - pip
-    
 
 dependencies:
   - python=3.11.9
   - ipykernel
-  - mdanalysis=2.7.0
   - pypdb=2.4
   - numba
   - nglview=3.0.3
@@ -19,5 +17,9 @@ dependencies:
   - more-itertools
   - pytest
   - ipywidgets
+  - h5py
+  - biopython
+  - scikit-learn=1.4.2
   - pip:
-    - pdb2pqr
+      - pdb2pqr
+      - mdanalysis
