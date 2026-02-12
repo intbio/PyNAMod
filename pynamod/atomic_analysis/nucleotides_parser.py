@@ -13,7 +13,7 @@ from pynamod.atomic_analysis.structures_storage import Nucleotides_Storage
 This module contains functions to analyze given residues in pdb structures to determine if they are nucleotides and their type. A class Nucleotide then represents their data and function get_all_nucleotides runs the full analysis. Analysis is performed with the usage of networkx library to build graphs based on experimental structures amd standard purine and pyrimidine residues of nucleotides structures. Graphs contain nodes with saved types of atom elements and edges that represent bonds based on distance cut off. Nucleotides are then determined by checking if standard graph is subgraph of experimental graph.
 '''
 
-def __get_base_u(base_type,nucleotides_pdb=nucleotides_pdb):
+def get_base_u(base_type,nucleotides_pdb=nucleotides_pdb):
     '''
     Function that is used to properly open standard mda universe of a nucleotide of a given type.
     
