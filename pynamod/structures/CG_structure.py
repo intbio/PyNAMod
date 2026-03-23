@@ -299,7 +299,6 @@ class CG_Structure:
 
                 self.proteins.append(Protein(n_cg_beads=2,ref_pair=pair,ref_vectors=ref_vectors,charges=charges,masses=masses,radii=radii,cg_structure=self,binded_dna_len = 1))
             elif model_type == '1spnp':
-                print('1spnp')
                 radii = torch.tensor([10])
                 charges = torch.tensor([-2])
                 origins = torch.from_numpy(np.vstack([lead_nucl_u.center_of_mass(),lag_nucl_u.center_of_mass()]).reshape(-1,1,3))
