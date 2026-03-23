@@ -13,7 +13,7 @@ from pynamod.atomic_analysis.structures_storage import Nucleotides_Storage
 This module contains functions to analyze given residues in pdb structures to determine if they are nucleotides and their type. A class Nucleotide then represents their data and function get_all_nucleotides runs the full analysis. Analysis is performed with the usage of networkx library to build graphs based on experimental structures amd standard purine and pyrimidine residues of nucleotides structures. Graphs contain nodes with saved types of atom elements and edges that represent bonds based on distance cut off. Nucleotides are then determined by checking if standard graph is subgraph of experimental graph.
 '''
 
-def _get_base_u(base_type,nucleotides_pdb=nucleotides_pdb):
+def get_base_u(base_type,nucleotides_pdb=nucleotides_pdb):
     '''
     Function that is used to properly open standard mda universe of a nucleotide of a given type.
     
@@ -55,13 +55,6 @@ def build_graph(mda_structure, d_threshold=1.6):
                    zip(list(graph.nodes.keys()), mda_structure.atoms)}
     nx.set_node_attributes(graph, nodes_names)
     return graph
- 
-#Create a dict of standard graphs
-base_graphs = {}
-for base in ['A', 'T', 'G', 'C', 'U']:
-    mda_str = _get_base_u(base)
-    #only purine or pyrimidine ring should be used in analysis
-    base_graphs[base] = build_graph(mda_str[11:])
     
 #Geometrical parameters are calculated based only on atoms of purine or pyrimidine ring, all other atoms should be excluded from analysis
 atoms_to_exclude = {'A': [5], 'T': [2, 5, 8], 'G': [5, 8], 'C': [2, 5], 'U': []}
@@ -117,7 +110,17 @@ def get_base_ref_frame(s_res,e_res):
     return R,o
 
 
-def check_if_nucleotide(residue, base_graphs=base_graphs,candidates = ['G', 'T', 'A', 'C', 'U']):
+nucleotide_graphs = {}
+base_graphs = {}
+for base in ['A', 'T', 'G', 'C', 'U']:
+    mda_str = get_base_u(base)
+    nucleotide_graphs[base] = build_graph(mda_str)
+    base_graphs[base] = build_graph(mda_str[11:])
+
+atoms_to_exclude = {'A': [5], 'T': [2, 5, 8], 'G': [5, 8], 'C': [2, 5], 'U': []}
+
+
+def check_if_nucleotide(residue, base_graphs=base_graphs,candidates = ['G', 'T', 'A', 'C', 'U'], use_full_nucleotide=False):
     # TODO: tune speed
     '''
     Finds if atoms of a given residue is nucleotide and gets it type. This function constructs graph of an experimental residue and determines if standard graph is subgraph of it. Then atoms that are not needed in further analysis are removed.
@@ -139,14 +142,18 @@ def check_if_nucleotide(residue, base_graphs=base_graphs,candidates = ['G', 'T',
     **stand_sel** - list of correctly ordered mda atoms of a standard nucleotide.
     
     **true_base** - name of this residue in one letter code.
-    '''
 
+    **use_full_nucleotide** - bool, whether to use a full nucleotide for generating output graphs instead of the acidic bases only
+    '''
     stand_sel = []
     exp_sel = []
     true_base = ''
     graph = build_graph(residue)
     for base in candidates:
-        base_graph = base_graphs[base].copy()
+        if use_full_nucleotide:
+            base_graph = nucleotide_graphs[base].copy()
+        else:
+            base_graph = base_graphs[base].copy()
         ismags_inst = nx.algorithms.isomorphism.ISMAGS(graph, base_graph, node_match=_check_atom_name)
         mapping = list(ismags_inst.find_isomorphisms(symmetry=True))
 
@@ -155,8 +162,9 @@ def check_if_nucleotide(residue, base_graphs=base_graphs,candidates = ['G', 'T',
             mapping = dict(zip(mapping[0].values(), mapping[0].keys()))
 
             true_base = base
-            for i in atoms_to_exclude[true_base]:
-                del (mapping[i])
+            if not use_full_nucleotide:
+                for i in atoms_to_exclude[true_base]:
+                    del (mapping[i])
 
             for id_sub, id_mol in sorted(mapping.items()):
                 exp_sel.append(ismags_inst.graph.nodes[id_mol]['atom'])
@@ -306,7 +314,7 @@ class Nucleotide:
     
 
         
-def get_all_nucleotides(DNA_Structure,leading_strands,sel):
+def get_all_nucleotides(DNA_Structure,leading_strands,sel,use_full_nucleotide=False):
     '''
     Applies check_if_nucleotide function to each residue in selection from mda Universe stored in DNA_Structure. All atoms with altLocs are ignored.
     
@@ -317,19 +325,23 @@ def get_all_nucleotides(DNA_Structure,leading_strands,sel):
     **leading_strands** - list of leading strands segids in the given structure.
     
     **sel** - selection that is applied to mda Universe before analysis. Standard residues only contain C, O and N atoms, therefore it is better to only use these atoms in experimental structure for efficiency reasons.
+
+    **use_full_nucleotide** - bool, whether to use a full nucleotide for generating output graphs instead of the acidic bases only.
     
     Returns:
     
     **nucleotides_data** - Nucleotides_Storage object that contains information about all found nucleotides.
     '''
     nucleotides_data = Nucleotides_Storage(Nucleotide,DNA_Structure.u)
-    sel = DNA_Structure.u.select_atoms(sel)
-    if hasattr(sel,'altLocs'):
-        sel = sel[sel.altLocs == '']
+    if sel:
+        sel = DNA_Structure.u.select_atoms(sel)
+    else:
+        sel = DNA_Structure.u.select_atoms('(type C or type O or type N) and not protein')
+    sel = sel[sel.altLocs == '']
     for res_numb, residue in enumerate(sel.residues):
         residue_str = residue.atoms
         if 10 < len(residue_str) < 40:  # FIXME
-            exp_sel, stand_sel, base = check_if_nucleotide(residue_str)
+            exp_sel, stand_sel, base = check_if_nucleotide(residue_str, use_full_nucleotide=use_full_nucleotide)
             if base != '':
                 leading_strand = residue.segid in leading_strands
                 R,o = get_base_ref_frame(sum(stand_sel),sum(exp_sel))

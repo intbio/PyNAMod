@@ -27,13 +27,11 @@ class DNA_Structure:
             setattr(self,name,value)
                 
     def build_from_u(self,leading_strands,pairs_in_structure = None,traj_len=1,
-                     sel='(type C or type O or type N) and not protein',overwrite_existing_dna=False,movable=False):
+                     sel='(type C or type O or type N) and not protein',overwrite_existing_dna=False,movable=False,use_full_nucleotide=False):
         '''
         This method is called by CG_Structure.analyze_dna and runs full analysis of atomic structure.
         '''
-        self.nucleotides = get_all_nucleotides(self,leading_strands,sel)
-        if len(self.nucleotides) == 0:
-            raise RuntimeError('No nucleotides were found')
+        self.nucleotides = get_all_nucleotides(self,leading_strands,sel,use_full_nucleotide=use_full_nucleotide)
 
         if pairs_in_structure is not None:
             self.parse_pairs(pairs_in_structure)

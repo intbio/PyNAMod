@@ -56,7 +56,7 @@ class CG_Structure:
     
         
     def analyze_dna(self,leading_strands=None,pairs_in_structure=None,sel='(type C or type O or type N) and not protein',
-                    trajectory=None,overwrite_existing_dna=False,movable=False):
+                    trajectory=None,overwrite_existing_dna=False,movable=False,use_full_nucleotide=False):
         '''Method that runs analysis of mda Universe and trajectory if given.
         
             Arguments:
@@ -68,13 +68,15 @@ class CG_Structure:
             **sel**: selection string for mda Universe to choose atoms which will be included in analysis.
             
             **movable** - boolean default value to set for each step for Carlo Simulations.
+
+            **use_full_nucleotide**: bool, if True, all atoms of nucleotide will be used for alignment.
         '''
         if self.dna.pairs_list and not overwrite_existing_dna:
             raise ValueError('DNA was already analyzed for this CG Structure. Use overwrite_existing_dna to proceed anyway.')
             
         if trajectory is None:
             trajectory = self.u.trajectory[1:]
-        self.dna.build_from_u(leading_strands,pairs_in_structure,len(trajectory)+1,sel,overwrite_existing_dna,movable=movable)
+        self.dna.build_from_u(leading_strands,pairs_in_structure,len(trajectory)+1,sel,overwrite_existing_dna,movable=movable,use_full_nucleotide=use_full_nucleotide)
         
         if len(trajectory) != 0:
             self.dna.analyze_trajectory(trajectory)
