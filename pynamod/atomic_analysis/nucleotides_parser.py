@@ -13,7 +13,7 @@ from pynamod.atomic_analysis.structures_storage import Nucleotides_Storage
 This module contains functions to analyze given residues in pdb structures to determine if they are nucleotides and their type. A class Nucleotide then represents their data and function get_all_nucleotides runs the full analysis. Analysis is performed with the usage of networkx library to build graphs based on experimental structures amd standard purine and pyrimidine residues of nucleotides structures. Graphs contain nodes with saved types of atom elements and edges that represent bonds based on distance cut off. Nucleotides are then determined by checking if standard graph is subgraph of experimental graph.
 '''
 
-def __get_base_u(base_type,nucleotides_pdb=nucleotides_pdb):
+def _get_base_u(base_type,nucleotides_pdb=nucleotides_pdb):
     '''
     Function that is used to properly open standard mda universe of a nucleotide of a given type.
     
@@ -59,7 +59,7 @@ def build_graph(mda_structure, d_threshold=1.6):
 #Create a dict of standard graphs
 base_graphs = {}
 for base in ['A', 'T', 'G', 'C', 'U']:
-    mda_str = __get_base_u(base)
+    mda_str = _get_base_u(base)
     #only purine or pyrimidine ring should be used in analysis
     base_graphs[base] = build_graph(mda_str[11:])
     
@@ -198,72 +198,75 @@ class Nucleotide:
             return self.resid < other.resid
         
     def __eq__(self,other):
+        if type(other) != Nucleotide:
+            return False
         return self.storage_class == other.storage_class and self.ind == other.ind
     
     
-    def __setter(self,attr,value):
+    def _setter(self,attr,value):
         getattr(self.storage_class,self.storage_class.get_name(attr))[self.ind] = value
         
-    def __getter(self,attr):
+    def _getter(self,attr):
         return getattr(self.storage_class,self.storage_class.get_name(attr))[self.ind]
         
-    def __set_property(attr):
-        setter = lambda self,value: self.__setter(value,attr=attr)
-        getter = lambda self: self.__getter(attr=attr)
+    def _set_property(attr):
+        setter = lambda self,value: self._setter(value,attr=attr)
+        getter = lambda self: self._getter(attr=attr)
         return property(fset=setter,fget=getter)
         
-    restype = __set_property('restype')
-    resid = __set_property('resid')
-    segid = __set_property('segid')
-    leading_strand = __set_property('leading_strand')
+    restype = _set_property('restype')
+    resid = _set_property('resid')
+    segid = _set_property('segid')
+    leading_strand = _set_property('leading_strand')
+    res_atoms = _set_property('res_atoms')
 
     
     @property
     def origin(self):
-        value = self.__getter('origin')
+        value = self._getter('origin')
         if value is None:
             R,o = get_base_ref_frame(self.s_residue,self.e_residue)
-            self.__setter('ref_frame',R)
-            self.__setter('origin',o)
+            self._setter('ref_frame',R)
+            self._setter('origin',o)
             value = o
         return value
     
     @origin.setter
     def origin(self,value):
-        self.__setter('origin',value)
+        self._setter('origin',value)
         
     @property
     def ref_frame(self):
-        value = self.__getter('ref_frame')
+        value = self._getter('ref_frame')
         if value is None:
             R,o = get_base_ref_frame(self.s_residue,self.e_residue)
-            self.__setter('ref_frame',R)
-            self.__setter('origin',o)
+            self._setter('ref_frame',R)
+            self._setter('origin',o)
             value = R
         return value
     
     @ref_frame.setter
     def ref_frame(self,value):
-        self.__setter('ref_frame',value)
+        self._setter('ref_frame',value)
         
     
         
     @property
     def s_residue(self):
-        value = self.__getter('s_residue')
+        value = self._getter('s_residue')
         if value is None:
             value = get_base_u(self.restype)
-            self.__setter('s_residue',value)
+            self._setter('s_residue',value)
         return value
     
     @s_residue.setter
     def s_residue(self,value):
-        self.__setter('s_residue',value)
+        self._setter('s_residue',value)
         
         
     @property
     def e_residue(self):
-        value = self.__getter('e_residue')
+        value = self._getter('e_residue')
         if value is None:
             if self.storage_class.mda_u is not None:
                 u = self.storage_class.mda_u.select_atoms(f'resid {self.resid} and segid {self.segid}')
@@ -271,8 +274,8 @@ class Nucleotide:
                 u = get_base_u(self.restype)
                 
             exp_sel, stand_sel, _ = check_if_nucleotide(residue,candidates=[self.restype])
-            self.__setter('s_residue',sum(stand_sel))
-            self.__setter('e_residue',sum(exp_sel))
+            self._setter('s_residue',sum(stand_sel))
+            self._setter('e_residue',sum(exp_sel))
             value = exp_sel
     
         return value
@@ -321,7 +324,8 @@ def get_all_nucleotides(DNA_Structure,leading_strands,sel):
     '''
     nucleotides_data = Nucleotides_Storage(Nucleotide,DNA_Structure.u)
     sel = DNA_Structure.u.select_atoms(sel)
-    sel = sel[sel.altLocs == '']
+    if hasattr(sel,'altLocs'):
+        sel = sel[sel.altLocs == '']
     for res_numb, residue in enumerate(sel.residues):
         residue_str = residue.atoms
         if 10 < len(residue_str) < 40:  # FIXME
@@ -329,7 +333,7 @@ def get_all_nucleotides(DNA_Structure,leading_strands,sel):
             if base != '':
                 leading_strand = residue.segid in leading_strands
                 R,o = get_base_ref_frame(sum(stand_sel),sum(exp_sel))
-                nucleotides_data.append(base, residue.resid, residue.segid, leading_strand,R,o.reshape(1,3),sum(stand_sel),sum(exp_sel),None)
+                nucleotides_data.append(base,residue_str, residue.resid, residue.segid, leading_strand,R,o.reshape(1,3),sum(stand_sel),sum(exp_sel),None)
                 
     if len(nucleotides_data) == 0:
         raise ValueError('No nucleotides found.')

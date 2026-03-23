@@ -32,13 +32,16 @@ class DNA_Structure:
         This method is called by CG_Structure.analyze_dna and runs full analysis of atomic structure.
         '''
         self.nucleotides = get_all_nucleotides(self,leading_strands,sel)
+        if len(self.nucleotides) == 0:
+            raise RuntimeError('No nucleotides were found')
 
         if pairs_in_structure is not None:
             self.parse_pairs(pairs_in_structure)
         else:
             self.pairs_list = get_pairs(self)
+            
         if len(self.pairs_list) == 0:
-            raise TypeError('No pairs were found')
+            raise RuntimeError('No pairs were found')
             
         self.get_geom_params(traj_len,overwrite_existing_dna)
         self._set_pair_params_list()
@@ -221,10 +224,11 @@ class DNA_Structure:
         self.pairs_list = Pairs_Storage(Base_Pair,self.nucleotides)
         for pair_data in pairs_in_structure:
             resid1,segid1,resid2,segid2 = pair_data
+
             nucl1 = self.nucleotides[[s==segid1 and r==resid1 for s,r in zip(self.nucleotides.segids,self.nucleotides.resids)]]
             
             nucl2 = self.nucleotides[[s==segid2 and r==resid2 for s,r in zip(self.nucleotides.segids,self.nucleotides.resids)]]
-            
+
             new_base_pair = Base_Pair(self.pairs_list,
                                       lead_nucl=nucl1, lag_nucl=nucl2)
             new_base_pair.get_pair_params()
@@ -261,14 +265,14 @@ class DNA_Structure:
         self.eps = torch.tensor([self.pairs_list.epsilons])
         self.charges = torch.tensor([self.pairs_list.charges])
 
-    def __getter(self,attr):
+    def _getter(self,attr):
         return getattr(self.geom_params,attr)
     
-    def __setter(self,value,attr):
+    def _setter(self,value,attr):
         setattr(self.geom_params,attr,value)
         
-    def __set_property(attr):
-        return property(lambda self: self.__getter(attr=attr),lambda self,value: self.__setter(value,attr=attr))
+    def _set_property(attr):
+        return property(lambda self: self._getter(attr=attr),lambda self,value: self._setter(value,attr=attr))
         
     
     @property
@@ -276,8 +280,8 @@ class DNA_Structure:
         return self.geom_params.trajectory
     
     
-    step_params = __set_property('local_params')
-    ref_frames = __set_property('ref_frames')
+    step_params = _set_property('local_params')
+    ref_frames = _set_property('ref_frames')
 
     @property
     def origins(self):

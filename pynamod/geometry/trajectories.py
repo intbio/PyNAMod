@@ -169,7 +169,7 @@ class H5_Trajectory(Trajectory):
 
             self.file[str(self._last_frame_ind).zfill(self.string_format_val)][attr][:] = value
             
-    def copy(self):
+    def copy(self,new):
         return self
 
 

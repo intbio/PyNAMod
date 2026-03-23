@@ -115,23 +115,23 @@ class Geometrical_Parameters(Geometry_Functions):
         
         return it
     
-    def __setter(self,value,attr,rebuild_func_name):
+    def _setter(self,value,attr,rebuild_func_name):
         self.trajectory._set_frame_attr(attr,value)
         if self._auto_rebuild_sw:
             self.rebuild(rebuild_func_name)
             
-    def __getter(self,attr):
+    def _getter(self,attr):
         return self.trajectory._get_frame_attr(attr)
     
-    def __set_property(attr,rebuild_func_name):
-        setter = lambda self,value: self.__setter(value,attr = attr,
+    def _set_property(attr,rebuild_func_name):
+        setter = lambda self,value: self._setter(value,attr = attr,
                                     rebuild_func_name=rebuild_func_name)
-        getter = lambda self: self.__getter(attr=attr)
+        getter = lambda self: self._getter(attr=attr)
         
         return property(fset=setter,fget=getter)
         
-    local_params = __set_property('local_params','rebuild_ref_frames_and_ori')
-    ref_frames = __set_property('ref_frames','rebuild_local_params')
-    origins = __set_property('origins','rebuild_local_params')
+    local_params = _set_property('local_params','rebuild_ref_frames_and_ori')
+    ref_frames = _set_property('ref_frames','rebuild_local_params')
+    origins = _set_property('origins','rebuild_local_params')
     
             
