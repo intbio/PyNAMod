@@ -27,7 +27,7 @@ class mod_Tensor(torch.Tensor):
                 if self.shape[-1] == 3 or self.shape[-1] == 4:
                     self.geom_class.rebuild('rebuild_local_params')
                 elif self.shape[-1] == 6:
-                    self.geom_class.rebuild('rebuild_ref_frames_and_ori',rebuild_proteins=True)
+                    self.geom_class.rebuild('rebuild_ref_frames_and_ori')
 
             elif isinstance(sl,int) or (isinstance(sl,torch.Tensor) and sl.shape == tuple()):
                 if self.shape[-1] == 3 or self.shape[-1] == 4:

@@ -52,6 +52,8 @@ class CG_Structure:
                 protein.cg_structure = self
         else:
             self.proteins = []
+            
+    
         
     def analyze_dna(self,leading_strands=None,pairs_in_structure=None,sel='(type C or type O or type N) and not protein',
                     trajectory=None,overwrite_existing_dna=False,movable=False,use_full_nucleotide=False):
@@ -78,6 +80,8 @@ class CG_Structure:
         
         if len(trajectory) != 0:
             self.dna.analyze_trajectory(trajectory)
+        
+        self._add_nucleotides()
             
     def build_dna(self,sequence,movable=True):
         '''Method that runs generation of linear DNA structure with given sequence. Each pair of nucleotides and each step of pairs gains similar average BDNA parameters.
@@ -92,6 +96,7 @@ class CG_Structure:
             raise ValueError('DNA was already initialized for this CG Structure.')
         
         self.dna.generate(sequence,movable=movable)
+        #self._add_nucleotides()
         
     def save_to_h5(self,file,**dataset_kwards):
         self.dna.save_to_h5(file,**dataset_kwards)
@@ -129,7 +134,8 @@ class CG_Structure:
             ref_index = len(self.dna.pairs_list)//2
         if protein_u is None:
             protein_u = self.u.select_atoms('protein')
-            protein_u = protein_u[protein_u.altLocs == '']
+            if hasattr(protein_u,'altLocs'):
+                protein_u = protein_u[protein_u.altLocs == '']
             
         if binded_dna_len is None:
             binded_dna_len = len(self.dna.pairs_list)
@@ -138,6 +144,7 @@ class CG_Structure:
         new.cg_structure = self
         new.build_model(self.dna)
         self.proteins.append(new)
+        self.proteins = sorted(self.proteins,key=lambda p: p.ref_pair.ind)
         
         
     def get_cg_mda_traj(self,allign_sel='all'):
@@ -206,14 +213,11 @@ class CG_Structure:
                                        norm=norm,
                                        label='charge',
                                        ticks=[-max_charge,0,max_charge])
-        colors = np.array([cb.cmap(norm(c))[:3] for c in self.dna.charges.reshape(-1)]).flatten().tolist()
+
         
-        view.shape.add_buffer('sphere',position=self.dna.origins.flatten().tolist(),
-                                  color=colors,radius=self.dna.pairs_list.radii)
-        for protein in self.proteins:
-            colors = np.array([cb.cmap(norm(c))[:3] for c in protein.charges]).flatten().tolist()
-            view.shape.add_buffer('sphere',position=protein.origins.flatten().tolist(),
-                                  color=colors,radius=protein.radii.tolist())
+        colors = np.array([cb.cmap(norm(c))[:3] for c in self.charges]).flatten().tolist()
+        view.shape.add_buffer('sphere',position=self.origins.flatten().tolist(),
+                              color=colors,radius=self.radii.tolist())
             
         if disable_charge_bar:
             plt.close(fig)
@@ -269,6 +273,45 @@ class CG_Structure:
         self.dna.to(device)
         for protein in self.proteins:
             protein.to(device)
+
+    
+    def _add_nucleotides(self,model_type='1spnp'):
+        '''Supported models:
+        - 1spnp
+        - 1spn
+        '''
+        nucl_masses = {
+                    'A':346.2212,
+                    'T':321.2085,
+                    'C':322.198,
+                    'G':362.223
+                        }
+        for pair in self.dna.pairs_list:
+            if model_type == '1spn':
+                
+                lead_nucl_u = pair.lead_nucl.res_atoms
+                lag_nucl_u = pair.lag_nucl.res_atoms
+
+                radii = torch.tensor([lead_nucl_u.radius_of_gyration(),lag_nucl_u.radius_of_gyration()])
+                charges = torch.tensor([-1,-1])
+                origins = torch.from_numpy(np.vstack([lead_nucl_u.center_of_mass(),lag_nucl_u.center_of_mass()]).reshape(-1,1,3))
+                masses = torch.tensor([lead_nucl_u.masses.sum(),lag_nucl_u.masses.sum()])
+                ind = pair.ind
+                ref_vectors = torch.matmul((origins - self.dna.origins[ind]),self.dna.ref_frames[ind])
+
+                self.proteins.append(Protein(n_cg_beads=2,ref_pair=pair,ref_vectors=ref_vectors,charges=charges,masses=masses,radii=radii,cg_structure=self,binded_dna_len = 1))
+            elif model_type == '1spnp':
+                radii = torch.tensor([10])
+                charges = torch.tensor([-2])
+                origins = torch.from_numpy(np.vstack([lead_nucl_u.center_of_mass(),lag_nucl_u.center_of_mass()]).reshape(-1,1,3))
+
+                masses = torch.tensor([nucl_masses[pair.lead_nucl.restype] + nucl_masses[pair.lag_nucl.restype]])
+                ind = pair.ind
+                ref_vectors = torch.zeros(3)
+
+                self.proteins.append(Protein(n_cg_beads=1,ref_pair=pair,ref_vectors=ref_vectors,charges=charges,masses=masses,radii=radii,cg_structure=self,binded_dna_len = 1))     
+
+        self.proteins = sorted(self.proteins,key=lambda p: p.ref_pair.ind)
         
     
     def __getitem__(self,sl):
@@ -285,15 +328,18 @@ class CG_Structure:
         
         return it
     
+    @property
+    def origins(self):
+        return torch.vstack([protein.origins for protein in self.proteins])
                 
     @property
     def radii(self):
-        return torch.cat([self.dna.radii.reshape(-1)]+[protein.radii for protein in self.proteins])
+        return torch.cat([protein.radii for protein in self.proteins])
     
     @property
     def eps(self):
-        return torch.cat([self.dna.eps.reshape(-1)]+[protein.eps for protein in self.proteins])
+        return torch.cat([protein.eps for protein in self.proteins])
     
     @property
     def charges(self):
-        return torch.cat([self.dna.charges.reshape(-1)]+[protein.charges for protein in self.proteins])
+        return torch.cat([protein.charges for protein in self.proteins])

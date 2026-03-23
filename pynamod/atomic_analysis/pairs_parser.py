@@ -42,6 +42,7 @@ class Base_Pair:
                  lag_nucl_ind=None,ind=None,lead_nucl=None,lag_nucl=None,radius=10,charge=-2,eps=0.5,geom_params=None):
         self.storage_class = storage_class
         self.ind = ind
+        
         if lead_nucl:
             lead_nucl_ind = lead_nucl.ind
             lag_nucl_ind = lag_nucl.ind
@@ -51,7 +52,7 @@ class Base_Pair:
             self.ind = ind
             storage_class.append(lead_nucl_ind,lag_nucl_ind,radius,charge,eps,geom_params)
 
-            if storage_class.nucleotides_storage[lag_nucl_ind].leading_strand:
+            if not storage_class.nucleotides_storage[lead_nucl_ind].leading_strand:
                 self.lead_nucl_ind, self.lag_nucl_ind = self.lag_nucl_ind, self.lead_nucl_ind
 
         else:
@@ -89,35 +90,31 @@ class Base_Pair:
             setattr(new,name,value)
         return new
     
-
-    def get_params(self,attr):
-        return getattr(self.geom_params,attr)[0]
-    
-    def set_params(self,value,attr):
-        getattr(self.geom_params,attr)[0] = value
+    def set_params(self,value,sl,attr):
+        getattr(self.geom_params,attr)[sl] = value
         
-    def __setter(self,value,attr):
+    def _setter(self,value,attr):
         getattr(self.storage_class,self.storage_class.get_name(attr))[self.ind] = value
         
-    def __getter(self,attr):
+    def _getter(self,attr):
         return getattr(self.storage_class,self.storage_class.get_name(attr))[self.ind]
         
-    def __set_property(attr):
-        setter = lambda self,value: self.__setter(value,attr=attr)
-        getter = lambda self: self.__getter(attr=attr)
+    def _set_property(attr):
+        setter = lambda self,value: self._setter(value,attr=attr)
+        getter = lambda self: self._getter(attr=attr)
         return property(fset=setter,fget=getter)
 
-    lead_nucl_ind = __set_property('lead_nucl_ind')
-    lag_nucl_ind = __set_property('lag_nucl_ind')
-    radius = __set_property('radius')
-    charge = __set_property('charge')
-    epsilon = __set_property('epsilon')
-    geom_params = __set_property('geom_params')
+    lead_nucl_ind = _set_property('lead_nucl_ind')
+    lag_nucl_ind = _set_property('lag_nucl_ind')
+    radius = _set_property('radius')
+    charge = _set_property('charge')
+    epsilon = _set_property('epsilon')
+    geom_params = _set_property('geom_params')
     
         
-    pair_params = property(fget=lambda self: self.get_params(attr='local_params'),fset=lambda self,value: self.set_params(attr='local_params'))
-    Rm = property(fget=lambda self: self.get_params(attr='ref_frames'),fset=lambda self,value: self.set_params(attr='ref_frames'))
-    om = property(fget=lambda self: self.get_params(attr='origins'),fset=lambda self,value: self.set_params(attr='origins'))
+    pair_params = property(fget=lambda self: self.geom_params.local_params[1],fset=lambda self,value: self.set_params(value,1,attr='local_params'))
+    Rm = property(fget=lambda self: self.geom_params.Rm[0],fset=lambda self,value: self.set_params(value,0,attr='Rm'))
+    om = property(fget=lambda self: self.geom_params.om[0],fset=lambda self,value: self.set_params(value,0,attr='om'))
     
     @property
     def pair_name(self):
@@ -186,22 +183,24 @@ def _fix_missing_pairs(dna_structure,pairs):
             prev_nucleotide = nucleotide.previous_nucleotide
     
             if next_nucleotide and prev_nucleotide and prev_nucleotide.ind in paired_nucl_ind and next_nucleotide.ind in paired_nucl_ind:
-                prev_pair_ind = pairs.lead_nucl_inds.index(prev_nucleotide.ind)
-                next_pair_ind = pairs.lead_nucl_inds.index(next_nucleotide.ind)
-                
-                lag_ind1 = pairs.lag_nucl_inds[prev_pair_ind]
-                lag_ind2 = pairs.lag_nucl_inds[next_pair_ind]
-                
-                pos_nucleotide1 = nucleotides[lag_ind1].previous_nucleotide
-                pos_nucleotide2 = nucleotides[lag_ind2].next_nucleotide
-                
-                if pos_nucleotide1 and pos_nucleotide2:
-                    
-                    if pos_nucleotide1.ind == pos_nucleotide2.ind:
-                        if ''.join(sorted((nucleotide.restype, pos_nucleotide1.restype))).upper() in ('AT', 'CG', 'AU'):
-                            new_base_pair = Base_Pair(pairs,
-                                                      lead_nucl=nucleotide, lag_nucl=pos_nucleotide1)
-                            new_base_pair.get_pair_params()
+                if prev_nucleotide.ind in pairs.lead_nucl_inds and next_nucleotide.ind in pairs.lead_nucl_inds:
+                    prev_pair_ind = pairs.lead_nucl_inds.index(prev_nucleotide.ind)
+                    next_pair_ind = pairs.lead_nucl_inds.index(next_nucleotide.ind)
+
+                    lag_ind1 = pairs.lag_nucl_inds[prev_pair_ind]
+                    lag_ind2 = pairs.lag_nucl_inds[next_pair_ind]
+
+                    pos_nucleotide1 = nucleotides[lag_ind1].previous_nucleotide
+                    pos_nucleotide2 = nucleotides[lag_ind2].next_nucleotide
+
+                    if pos_nucleotide1 and pos_nucleotide2:
+
+                        if pos_nucleotide1.ind == pos_nucleotide2.ind:
+                            if ''.join(sorted((nucleotide.restype, pos_nucleotide1.restype))).upper() in ('AT', 'CG', 'AU'):
+                                new_base_pair = Base_Pair(pairs,
+                                                          lead_nucl=nucleotide, lag_nucl=pos_nucleotide1)
+                               
+                                new_base_pair.get_pair_params()
 
     return pairs.sort()
     
@@ -228,13 +227,13 @@ def get_pairs(dna_structure,radius=10,charge=-2,eps=0.5):
     geom_params = []
     
     for ldi,lgi in zip(lead_ind,lag_ind):
-        ori = torch.vstack([nucleotides.origins[ldi],nucleotides.origins[lgi]]).reshape(2,1,3)
-        r_frames = torch.stack([nucleotides.ref_frames[ldi],nucleotides.ref_frames[lgi]])
-        
+        ori = torch.vstack([nucleotides.origins[lgi],nucleotides.origins[ldi]]).reshape(2,1,3)
+        r_frames = torch.stack([nucleotides.ref_frames[lgi],nucleotides.ref_frames[ldi]])
         geom_params.append(Geometrical_Parameters(ref_frames = r_frames, origins = ori,
                                                   pair_params=True))
 
     pairs = Pairs_Storage(Base_Pair,nucleotides,lead_ind,lag_ind,radii,charges,epsilons,geom_params)
+
     pairs = _fix_missing_pairs(dna_structure,pairs)
     
     return pairs
