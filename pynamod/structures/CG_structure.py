@@ -56,7 +56,7 @@ class CG_Structure:
     
         
     def analyze_dna(self,leading_strands=None,pairs_in_structure=None,sel='(type C or type O or type N) and not protein',
-                    trajectory=None,overwrite_existing_dna=False,movable=False,use_full_nucleotide=False):
+                    trajectory=None,overwrite_existing_dna=False,movable=False):
         '''Method that runs analysis of mda Universe and trajectory if given.
         
             Arguments:
@@ -68,15 +68,13 @@ class CG_Structure:
             **sel**: selection string for mda Universe to choose atoms which will be included in analysis.
             
             **movable** - boolean default value to set for each step for Carlo Simulations.
-
-            **use_full_nucleotide**: bool, if True, all atoms of nucleotide will be used for alignment.
         '''
         if self.dna.pairs_list and not overwrite_existing_dna:
             raise ValueError('DNA was already analyzed for this CG Structure. Use overwrite_existing_dna to proceed anyway.')
             
         if trajectory is None:
             trajectory = self.u.trajectory[1:]
-        self.dna.build_from_u(leading_strands,pairs_in_structure,len(trajectory)+1,sel,overwrite_existing_dna,movable=movable,use_full_nucleotide=use_full_nucleotide)
+        self.dna.build_from_u(leading_strands,pairs_in_structure,len(trajectory)+1,sel,overwrite_existing_dna,movable=movable)
         
         if len(trajectory) != 0:
             self.dna.analyze_trajectory(trajectory)
@@ -96,7 +94,7 @@ class CG_Structure:
             raise ValueError('DNA was already initialized for this CG Structure.')
         
         self.dna.generate(sequence,movable=movable)
-        #self._add_nucleotides()
+        self._add_nucleotides()
         
     def save_to_h5(self,file,**dataset_kwards):
         self.dna.save_to_h5(file,**dataset_kwards)
@@ -303,7 +301,7 @@ class CG_Structure:
             elif model_type == '1spnp':
                 radii = torch.tensor([10])
                 charges = torch.tensor([-2])
-                origins = torch.from_numpy(np.vstack([lead_nucl_u.center_of_mass(),lag_nucl_u.center_of_mass()]).reshape(-1,1,3))
+                origins = self.dna.origins[pair.ind]
 
                 masses = torch.tensor([nucl_masses[pair.lead_nucl.restype] + nucl_masses[pair.lag_nucl.restype]])
                 ind = pair.ind
