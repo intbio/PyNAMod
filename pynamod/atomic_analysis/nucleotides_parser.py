@@ -5,7 +5,6 @@ import MDAnalysis as mda
 import numpy as np
 import torch
 from scipy.spatial.distance import cdist
-from scipy.spatial.transform import Rotation as R
 from pynamod.atomic_analysis.base_structures import nucleotides_pdb
 from pynamod.atomic_analysis.structures_storage import Nucleotides_Storage
 
@@ -55,7 +54,8 @@ def build_graph(mda_structure, d_threshold=1.6):
                    zip(list(graph.nodes.keys()), mda_structure.atoms)}
     nx.set_node_attributes(graph, nodes_names)
     return graph
-    
+
+
 #Geometrical parameters are calculated based only on atoms of purine or pyrimidine ring, all other atoms should be excluded from analysis
 atoms_to_exclude = {'A': [5], 'T': [2, 5, 8], 'G': [5, 8], 'C': [2, 5], 'U': []}
 
@@ -69,14 +69,14 @@ def _check_atom_name(node1, node2):
 def get_base_ref_frame(s_res,e_res):
     '''
     Calculate R frame and origin with the same algorithm as in 3dna.
-    
+
     Attributes:
-    
+
     **e_res, s_res** - mda.atoms of experimental and standard residues with correctly ordered atoms.
-    
-    
+
+
     returns:
-    
+
     **R**, **o** - torch.Tensor R frame and origin of nucleotide with shapes (3,3) and (1,3).
     '''
     s_coord = s_res.positions
@@ -124,23 +124,23 @@ def check_if_nucleotide(residue, base_graphs=base_graphs,candidates = ['G', 'T',
     # TODO: tune speed
     '''
     Finds if atoms of a given residue is nucleotide and gets it type. This function constructs graph of an experimental residue and determines if standard graph is subgraph of it. Then atoms that are not needed in further analysis are removed.
-    
+
     Attributes:
-    
+
     **residue** - mda.atoms of a residue to check.
-    
+
     **base_graphs** - dictionary of graphs that represent 5 standard nucleotides.
-    
+
     **candidates** - list of possible types of nucleotides. Their order matters, as graphs of some standard structures are subgraphs of other standard graphs. 
-    
+
     Returns:
-    
+
     Note that all lists will be empty if residue is not a nucleotide.
-    
+
     **exp_sel** - list of correctly ordered mda atoms of residue.
-    
+
     **stand_sel** - list of correctly ordered mda atoms of a standard nucleotide.
-    
+
     **true_base** - name of this residue in one letter code.
 
     **use_full_nucleotide** - bool, whether to use a full nucleotide for generating output graphs instead of the acidic bases only
@@ -155,8 +155,8 @@ def check_if_nucleotide(residue, base_graphs=base_graphs,candidates = ['G', 'T',
         else:
             base_graph = base_graphs[base].copy()
         ismags_inst = nx.algorithms.isomorphism.ISMAGS(graph, base_graph, node_match=_check_atom_name)
-        mapping = list(ismags_inst.find_isomorphisms(symmetry=True))
 
+        mapping = list(ismags_inst.find_isomorphisms(symmetry=True))
         if mapping != []:
             # надо проверять, что в меппинге хватает атомов, надо, чтобы не было лишних атомов
             mapping = dict(zip(mapping[0].values(), mapping[0].keys()))

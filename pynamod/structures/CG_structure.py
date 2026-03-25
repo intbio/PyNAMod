@@ -152,23 +152,17 @@ class CG_Structure:
             
             **allign_sel** - selection for mda Universe. Atoms in this selection will be used to allign model in all frames.
             '''
-        dna_len = len(self.dna.pairs_list)
-        proteins = self.proteins[::-1]
-        if self.proteins:
-            prot_len = sum([protein.n_cg_beads for protein in proteins])
-        else:
-            prot_len = 0
-        n_parts = dna_len + prot_len
-        segids = [0]*dna_len + [item for i,protein in enumerate(proteins) for item in [1+i]*protein.n_cg_beads]
-        resnames = ['dna']*dna_len + ['prot']*prot_len
-        resids = np.arange(dna_len + prot_len)
+
+        n_parts = sum([protein.n_cg_beads for protein in self.proteins])
+
+        segids = [item for i,protein in enumerate(self.proteins) for item in [i]*protein.n_cg_beads]
+        resnames = ['prot']*n_parts
+        resids = np.arange(n_parts)
         coords = []
-        
         for ts in self.dna.trajectory:
             frame_coord = torch.tensor(self.dna.origins.reshape(1,-1,3))
             if self.proteins:
-                prot_coord = torch.vstack([protein.origins for protein in proteins]).reshape(1,-1,3)
-                frame_coord = torch.cat([frame_coord,prot_coord],dim=1)
+                frame_coord = torch.vstack([protein.origins for protein in self.proteins]).reshape(1,-1,3)
             coords.append(frame_coord)
         coords = torch.cat(coords).numpy()
         n_frames = coords.shape[0]
