@@ -10,7 +10,7 @@ import torch
 from MDAnalysis.analysis import align
 from MDAnalysis.coordinates.memory import MemoryReader
 
-from pynamod.atomic_analysis.mda_element_guess import add_guessed_elements
+from pynamod.atomic_analysis.mda_element_guess import add_guessed_elements, load_pdb_universe
 from pynamod.structures.DNA_structure import DNA_Structure
 from pynamod.structures.protein import Protein
 
@@ -34,9 +34,11 @@ class CG_Structure:
         if mdaUniverse:
             self.u = mdaUniverse
         elif pdb_id:
-            self.u = mda.Universe(io.StringIO(pypdb.pdb_client.get_pdb_file(pdb_id)), format='PDB')
+            self.u = load_pdb_universe(
+                io.StringIO(pypdb.pdb_client.get_pdb_file(pdb_id)), format='PDB'
+            )
         elif file:
-            self.u = mda.Universe(file)
+            self.u = load_pdb_universe(file)
         else:
             self.u = None
         if self.u:

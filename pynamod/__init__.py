@@ -1,8 +1,7 @@
 import warnings
-import pypdb
+import pypdb # Must be imported before suppression of warnings
 
-warnings.filterwarnings('ignore', category=UserWarning)
-warnings.filterwarnings('ignore', category=DeprecationWarning)
+warnings.filterwarnings('ignore', category=DeprecationWarning, append=False)
 
 import pynamod.geometry
 from pynamod.energy.energy import Energy
