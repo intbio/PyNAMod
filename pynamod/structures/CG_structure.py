@@ -5,7 +5,7 @@ import nglview as nv
 import torch
 import numpy as np
 import matplotlib as mpl
-from MDAnalysis.topology.guessers import guess_atom_element
+from pynamod.atomic_analysis.mda_element_guess import add_guessed_elements
 from MDAnalysis.coordinates.memory import MemoryReader
 from MDAnalysis.analysis import align
 import matplotlib.pyplot as plt
@@ -37,7 +37,7 @@ class CG_Structure:
         else:
             self.u = None
         if self.u:
-            self.u.add_TopologyAttr('elements',[guess_atom_element(name) for name in self.u.atoms.names])
+            add_guessed_elements(self.u)
             
         if dna_structure:
             self.dna = dna_structure

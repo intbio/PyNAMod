@@ -1,6 +1,5 @@
 import io
 import networkx as nx
-from MDAnalysis.topology.guessers import guess_atom_element
 import MDAnalysis as mda
 import numpy as np
 import torch
@@ -8,6 +7,7 @@ from scipy.spatial.distance import cdist
 from scipy.spatial.transform import Rotation as R
 from pynamod.atomic_analysis.base_structures import nucleotides_pdb
 from pynamod.atomic_analysis.structures_storage import Nucleotides_Storage
+from .mda_element_guess import add_guessed_elements
 
 '''
 This module contains functions to analyze given residues in pdb structures to determine if they are nucleotides and their type. A class Nucleotide then represents their data and function get_all_nucleotides runs the full analysis. Analysis is performed with the usage of networkx library to build graphs based on experimental structures amd standard purine and pyrimidine residues of nucleotides structures. Graphs contain nodes with saved types of atom elements and edges that represent bonds based on distance cut off. Nucleotides are then determined by checking if standard graph is subgraph of experimental graph.
@@ -29,7 +29,7 @@ def get_base_u(base_type,nucleotides_pdb=nucleotides_pdb):
     '''
     
     base_u = mda.Universe(io.StringIO(nucleotides_pdb[base_type]), format='PDB')
-    base_u.add_TopologyAttr('elements', [guess_atom_element(name) for name in base_u.atoms.names])
+    add_guessed_elements(base_u)
     return base_u.atoms
 
 def build_graph(mda_structure, d_threshold=1.6):
