@@ -2,6 +2,8 @@ import warnings
 warnings.filterwarnings('ignore', category=UserWarning)
 warnings.filterwarnings('ignore', category=DeprecationWarning)
 
+import pypdb
+
 # Monkeypatch guess_atom_element to suppress DeprecationWarning (used internally by guess_TopologyAttrs)
 import MDAnalysis.topology.guessers as _mda_guessers
 _guess_atom_element_orig = _mda_guessers.guess_atom_element
