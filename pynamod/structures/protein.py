@@ -6,7 +6,7 @@ import MDAnalysis as mda
 import numpy as np
 import pypdb
 import torch
-from sklearn.neighbors import KNeighborsClassifier
+from sklearn.neighbors import NearestNeighbors
 
 
 class Protein:
@@ -117,10 +117,11 @@ class Protein:
 
     def _get_cg_params(self):
         '''This method assigns each atom to a CG beads, than the charge of each bead is determined as a sum of charges of its atoms, and radii is defined by radius of gyration of atom groups of this CG bead.'''
-        classifier = KNeighborsClassifier(1)
-        classifier.fit(self.origins.reshape(-1, 3), range(self.n_cg_beads))
-
-        groups = classifier.predict(self.u.atoms.positions)
+        centers = self.origins.reshape(-1, 3).detach().cpu().numpy()
+        nn = NearestNeighbors(n_neighbors=1)
+        nn.fit(centers)
+        _, groups = nn.kneighbors(self.u.atoms.positions, return_distance=True)
+        groups = groups.ravel()
         radii = np.zeros(self.n_cg_beads)
         self.charges = np.zeros(self.n_cg_beads)
         self.masses = np.zeros(self.n_cg_beads)
