@@ -21,6 +21,9 @@ class Protein:
             else:
                 pdb_temp = tempfile.NamedTemporaryFile(suffix='.pdb')
                 pqr_temp = tempfile.NamedTemporaryFile(suffix='.pqr')
+                # PDBWriter warns if formalcharges is missing; PDBs rarely carry that column.
+                if not hasattr(mdaUniverse.atoms, 'formalcharges'):
+                    mdaUniverse.universe.add_TopologyAttr('formalcharges')
                 mdaUniverse.atoms.write(pdb_temp.name)
                 process = subprocess.run(['pdb2pqr', '--ff=AMBER', '--log-level=CRITICAL', pdb_temp.name, pqr_temp.name])
                 self.u = mda.Universe(pqr_temp.name)
