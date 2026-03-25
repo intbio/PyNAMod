@@ -251,7 +251,11 @@ class DNA_Structure:
             origins=torch.tensor(np.asarray(data['origins'])),
             ref_frames=torch.tensor(np.asarray(data['ref_frames'])),
         )
-        self.movable_steps = torch.tensor(np.asarray(data['movable_steps']))
+        if 'movable_steps' in data:
+            self.movable_steps = torch.tensor(np.asarray(data['movable_steps']))
+        else:
+            # Older cg_*.h5 files predate this dataset; default matches build_from_u(movable=False).
+            self.movable_steps = torch.zeros(len(self.pairs_list), dtype=torch.bool)
         self._set_pair_params_list()
 
     def _set_pair_params_list(self):
