@@ -75,7 +75,7 @@ class Geometry_Functions:
         not_except = ~(is180+ism180)
         Rm[not_except, :, 1] = (R2p[not_except, :, 1] + R1p[not_except, :, 1])/2
 
-        Rm[:, :, 0] = torch.cross(Rm[:, :, 1], Rm[:, :, 2])
+        Rm[:, :, 0] = torch.linalg.cross(Rm[:, :, 1], Rm[:, :, 2], dim=-1)
         self.Rm = Rm
         vectors_norm = torch.norm(self.Rm, dim=1).reshape(-1, 1, 3)
         Rm /= vectors_norm

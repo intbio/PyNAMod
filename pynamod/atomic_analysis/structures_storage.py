@@ -177,7 +177,7 @@ class Structures_Storage:
         '''
         for name, data in file[group_name].items():
             if len(data.shape) > 1:
-                data = torch.tensor(data)
+                data = torch.tensor(np.asarray(data))
             else:
                 data = list(data)
             if isinstance(data[0], bytes):

@@ -246,11 +246,12 @@ class DNA_Structure:
 
         self.pairs_list.load_from_h5(data, 'pairs')
         self.nucleotides.load_from_h5(data, 'nucleotides')
-        self.geom_params = Geometrical_Parameters(local_params=torch.tensor(data['step_params']),
-                                                  origins=torch.tensor(data['origins']),
-                                                  ref_frames=torch.tensor(data['ref_frames'])
-                                                  )
-        self.movable_steps = torch.tensor(data['movable_steps'])
+        self.geom_params = Geometrical_Parameters(
+            local_params=torch.tensor(np.asarray(data['step_params'])),
+            origins=torch.tensor(np.asarray(data['origins'])),
+            ref_frames=torch.tensor(np.asarray(data['ref_frames'])),
+        )
+        self.movable_steps = torch.tensor(np.asarray(data['movable_steps']))
         self._set_pair_params_list()
 
     def _set_pair_params_list(self):

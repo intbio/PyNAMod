@@ -65,8 +65,8 @@ class Protein:
 
     def get_true_pos(self, dna_structure=None, ref_om=None, ref_Rm=None):
         if ref_om is None:
-            ref_om = torch.tensor(dna_structure.origins[self.ref_pair.ind]).to(self.ref_vectors.dtype)
-            ref_Rm = torch.tensor(dna_structure.ref_frames[self.ref_pair.ind]).to(self.ref_vectors.dtype)
+            ref_om = dna_structure.origins[self.ref_pair.ind].detach().clone().to(self.ref_vectors.dtype)
+            ref_Rm = dna_structure.ref_frames[self.ref_pair.ind].detach().clone().to(self.ref_vectors.dtype)
 
         return torch.matmul(self.ref_vectors.reshape(-1, 1, 3), ref_Rm.T) + ref_om
 
@@ -111,8 +111,8 @@ class Protein:
             origins = origins + eps * np.exp(-k_beads/lmbd).reshape(-1, 1) * (ref_atom_r - origins)
 
         origins = torch.from_numpy(origins.reshape(-1, 1, 3))
-        ref_om = torch.tensor(dna_structure.origins[self.ref_pair.ind]).to(origins.dtype)
-        ref_Rm = torch.tensor(dna_structure.ref_frames[self.ref_pair.ind]).to(origins.dtype)
+        ref_om = dna_structure.origins[self.ref_pair.ind].detach().clone().to(origins.dtype)
+        ref_Rm = dna_structure.ref_frames[self.ref_pair.ind].detach().clone().to(origins.dtype)
         self.ref_vectors = torch.matmul((origins - ref_om), ref_Rm)
 
     def _get_cg_params(self):
