@@ -1,6 +1,5 @@
 import io
 
-import MDAnalysis as mda
 import networkx as nx
 import numpy as np
 import torch
@@ -10,10 +9,10 @@ from scipy.spatial.transform import Rotation as R
 from pynamod.atomic_analysis.base_structures import nucleotides_pdb
 from pynamod.atomic_analysis.structures_storage import Nucleotides_Storage
 
-from .mda_element_guess import add_guessed_elements
+from .mda_element_guess import add_guessed_elements, load_pdb_universe
 
 '''
-This module contains functions to analyze given residues in pdb structures to determine if they are nucleotides and their type. A class Nucleotide then represents their data and function get_all_nucleotides runs the full analysis. Analysis is performed with the usage of networkx library to build graphs based on experimental structures amd standard purine and pyrimidine residues of nucleotides structures. Graphs contain nodes with saved types of atom elements and edges that represent bonds based on distance cut off. Nucleotides are then determined by checking if standard graph is subgraph of experimental graph.
+This module contains functions to analyze given residues in pdb structures to determine if they are nucleotides and their type. A class Nucleotide then represents their data and function get_all_nucleotides runs the full analysis. Analysis is performed with the usage of networkx library to build graphs based on experimental structures amd standard purine and pyrimidine residues of nucleotides structures. Graphs contain nodes with saved types of atom elements and edges that represent bonds based on distance cut off. Nucleotides are then determined by checking if standard graph is subgraph of experimental graph (VF2 via :class:`networkx.algorithms.isomorphism.GraphMatcher`).
 '''
 
 
@@ -32,7 +31,7 @@ def get_base_u(base_type, nucleotides_pdb=nucleotides_pdb):
     **mdaUniverse** with element types.
     '''
 
-    base_u = mda.Universe(io.StringIO(nucleotides_pdb[base_type]), format='PDB')
+    base_u = load_pdb_universe(io.StringIO(nucleotides_pdb[base_type]), format='PDB')
     add_guessed_elements(base_u)
     return base_u.atoms
 
@@ -68,7 +67,7 @@ atoms_to_exclude = {'A': [5], 'T': [2, 5, 8], 'G': [5, 8], 'C': [2, 5], 'U': []}
 
 def _check_atom_name(node1, node2):
     '''
-    Supporting function for nx.algorithms.isomorphism.ISMAGS to match elements names in nodes.
+    Node attribute match for :class:`networkx.algorithms.isomorphism.GraphMatcher` (element equality).
     '''
     return node1['el'] == node2['el']
 
@@ -161,21 +160,23 @@ def check_if_nucleotide(residue, base_graphs=base_graphs, candidates=['G', 'T', 
             base_graph = nucleotide_graphs[base].copy()
         else:
             base_graph = base_graphs[base].copy()
-        ismags_inst = nx.algorithms.isomorphism.ISMAGS(graph, base_graph, node_match=_check_atom_name)
-        mapping = list(ismags_inst.find_isomorphisms(symmetry=True))
+        GM = nx.algorithms.isomorphism.GraphMatcher(
+            graph, base_graph, node_match=_check_atom_name
+        )
+        mapping_list = list(GM.subgraph_monomorphisms_iter())
 
-        if mapping != []:
-            # надо проверять, что в меппинге хватает атомов, надо, чтобы не было лишних атомов
-            mapping = dict(zip(mapping[0].values(), mapping[0].keys()))
+        if mapping_list:
+            # VF2 yields G1 (experimental) -> G2 (standard); invert to match ISMAGS layout.
+            mapping = {g2: g1 for g1, g2 in mapping_list[0].items()}
 
             true_base = base
             if not use_full_nucleotide:
                 for i in atoms_to_exclude[true_base]:
-                    del (mapping[i])
+                    del mapping[i]
 
             for id_sub, id_mol in sorted(mapping.items()):
-                exp_sel.append(ismags_inst.graph.nodes[id_mol]['atom'])
-                stand_sel.append(ismags_inst.subgraph.nodes[id_sub]['atom'])
+                exp_sel.append(graph.nodes[id_mol]['atom'])
+                stand_sel.append(base_graph.nodes[id_sub]['atom'])
 
             break
     return exp_sel, stand_sel, true_base
