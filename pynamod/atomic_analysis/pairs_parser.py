@@ -1,8 +1,8 @@
-import pickle
 from importlib.resources import files
 from itertools import combinations
 
 import numpy as np
+import onnxruntime as ort
 import torch
 from more_itertools import pairwise
 from scipy.spatial.distance import pdist
@@ -12,12 +12,35 @@ from pynamod.atomic_analysis.structures_storage import Pairs_Storage
 from pynamod.geometry.geometrical_parameters import Geometrical_Parameters
 
 '''
-This module determines all base pairs of nucleotides in a structure. The analysis is performed by get_pairs and fix_missing_pairs functions, and the representation of the data is given by Base_Pair class similarly to Nucleotide class. The analysis starts by detecting all possible pair candidates that are Watson–Crick type and and the distance between nucleotides is less than 4 Å. True pairs are than chosen with RandomForest classifier, the trained model is saved in classifier.pkl. Missing pairs are restored by their context. Classifier can mistakenly assign nucleotide into two or more pairs, which was adressed in model training, which focused on decreasing the number of false positive pairs.
+This module determines all base pairs of nucleotides in a structure. The analysis is performed by get_pairs and fix_missing_pairs functions, and the representation of the data is given by Base_Pair class similarly to Nucleotide class. The analysis starts by detecting all possible pair candidates that are Watson–Crick type and and the distance between nucleotides is less than 4 Å. True pairs are than chosen with RandomForest classifier, the trained model is saved in classifier.onnx. Missing pairs are restored by their context. Classifier can mistakenly assign nucleotide into two or more pairs, which was adressed in model training, which focused on decreasing the number of false positive pairs.
 '''
 
-path = files('pynamod').joinpath('atomic_analysis/classifier.pkl')
-with open(path, 'rb') as f:
-    classifier = pickle.load(f)
+
+class _OnnxPairClassifier:
+    '''Wraps ONNX Runtime inference for the pair RandomForest model.'''
+
+    def __init__(self, model_bytes: bytes):
+        so = ort.SessionOptions()
+        so.intra_op_num_threads = 1
+        so.inter_op_num_threads = 1
+        self._sess = ort.InferenceSession(
+            model_bytes, sess_options=so, providers=['CPUExecutionProvider']
+        )
+        self._iname = self._sess.get_inputs()[0].name
+        onames = [o.name for o in self._sess.get_outputs()]
+        label_name = next((n for n in onames if 'label' in n.lower()), onames[0])
+        self._oname = label_name
+
+    def predict(self, X):
+        x = np.asarray(X, dtype=np.float32)
+        y = self._sess.run([self._oname], {self._iname: x})[0]
+        if y.dtype.kind == 'f':
+            return (y > 0.5).astype(bool).reshape(-1)
+        return y.astype(bool).reshape(-1)
+
+
+_onnx_path = files('pynamod').joinpath('atomic_analysis/classifier.onnx')
+classifier = _OnnxPairClassifier(_onnx_path.read_bytes())
 
 
 class Base_Pair:

@@ -18,6 +18,7 @@ dependencies:
   - more-itertools
   - pytest
   - ipywidgets
+  - onnxruntime
 
   - pip:
       - --extra-index-url https://download.pytorch.org/whl/cu130
