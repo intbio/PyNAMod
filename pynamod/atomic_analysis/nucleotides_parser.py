@@ -221,8 +221,12 @@ class Nucleotide:
         return getattr(self.storage_class, self.storage_class.get_name(attr))[self.ind]
 
     def __set_property(attr):
-        def setter(self, value): return self.__setter(value, attr=attr)
-        def getter(self): return self.__getter(attr=attr)
+        def setter(self, value):
+            self.__setter(attr, value)
+
+        def getter(self):
+            return self.__getter(attr)
+
         return property(fset=setter, fget=getter)
 
     restype = __set_property('restype')
@@ -279,16 +283,16 @@ class Nucleotide:
             else:
                 u = get_base_u(self.restype)
 
-            exp_sel, stand_sel, _ = check_if_nucleotide(residue, candidates=[self.restype])
+            exp_sel, stand_sel, _ = check_if_nucleotide(u, candidates=[self.restype])
             self.__setter('s_residue', sum(stand_sel))
             self.__setter('e_residue', sum(exp_sel))
-            value = exp_sel
+            value = self.__getter('e_residue')
 
         return value
 
     @e_residue.setter
     def e_residue(self, value):
-        self._setter('e_residue', value)
+        self.__setter('e_residue', value)
 
     @property
     def next_nucleotide(self):
