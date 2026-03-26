@@ -99,7 +99,10 @@ class DNA_Structure:
     def analyze_trajectory(self, trajectory):
         '''Runs analysis of all frames in trajectory based on previously generated pairs list.'''
         try:
-            for ts in tqdm(trajectory):
+            # Skip tqdm for 0–1 iterable frames (common for static structures; avoids a pointless 1/1 bar).
+            n_frames = len(trajectory) if hasattr(trajectory, '__len__') else None
+            show_pbar = n_frames is None or n_frames > 1
+            for ts in tqdm(trajectory, disable=not show_pbar):
                 self.geom_params.trajectory.cur_step += 1
 
                 for i in range(len(self.nucleotides)):
@@ -222,8 +225,14 @@ class DNA_Structure:
         for pair_data in pairs_in_structure:
             resid1, segid1, resid2, segid2 = pair_data
             nucl1 = self.nucleotides[[s == segid1 and r == resid1 for s, r in zip(self.nucleotides.segids, self.nucleotides.resids)]]
+            if len(nucl1) != 1:
+                raise ValueError(f'Expected exactly one nucleotide for ({resid1}, {segid1}), got {len(nucl1)}')
+            nucl1 = nucl1[0]
 
             nucl2 = self.nucleotides[[s == segid2 and r == resid2 for s, r in zip(self.nucleotides.segids, self.nucleotides.resids)]]
+            if len(nucl2) != 1:
+                raise ValueError(f'Expected exactly one nucleotide for ({resid2}, {segid2}), got {len(nucl2)}')
+            nucl2 = nucl2[0]
 
             new_base_pair = Base_Pair(self.pairs_list,
                                       lead_nucl=nucl1, lag_nucl=nucl2)

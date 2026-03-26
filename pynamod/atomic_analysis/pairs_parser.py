@@ -168,9 +168,13 @@ def _get_nucl_in_pairs_ind(nucleotides_storage):
     dist_check = dist < 4
 
     check = [name_check and d_check for name_check, d_check in zip(pair_names_check, dist_check)]
+    if not any(check):
+        return [], []
 
     rot_dif = [R.align_vectors(r1, r2)[0] for candidate, (r1, r2) in
                zip(check, combinations(nucleotides_storage.ref_frames, 2)) if candidate]
+    if len(rot_dif) == 0:
+        return [], []
     rot_dif = R.concatenate(rot_dif).as_euler('zyx', degrees=True)
     rot_dif[:, 2] += (rot_dif[:, 2] < 0) * 360
 
@@ -198,6 +202,7 @@ def _fix_missing_pairs(dna_structure, pairs):
     '''
     nucleotides = dna_structure.nucleotides
     paired_nucl_ind = pairs.lead_nucl_inds + pairs.lag_nucl_inds
+    lead_to_pair = {lead_ind: pair_ind for pair_ind, lead_ind in enumerate(pairs.lead_nucl_inds)}
 
     for nucleotide in nucleotides[:-1]:
 
@@ -207,8 +212,11 @@ def _fix_missing_pairs(dna_structure, pairs):
             prev_nucleotide = nucleotide.previous_nucleotide
 
             if next_nucleotide and prev_nucleotide and prev_nucleotide.ind in paired_nucl_ind and next_nucleotide.ind in paired_nucl_ind:
-                prev_pair_ind = pairs.lead_nucl_inds.index(prev_nucleotide.ind)
-                next_pair_ind = pairs.lead_nucl_inds.index(next_nucleotide.ind)
+                # Some nucleotides can be paired only as lagging partners, so skip them instead of raising.
+                if prev_nucleotide.ind not in lead_to_pair or next_nucleotide.ind not in lead_to_pair:
+                    continue
+                prev_pair_ind = lead_to_pair[prev_nucleotide.ind]
+                next_pair_ind = lead_to_pair[next_nucleotide.ind]
 
                 lag_ind1 = pairs.lag_nucl_inds[prev_pair_ind]
                 lag_ind2 = pairs.lag_nucl_inds[next_pair_ind]

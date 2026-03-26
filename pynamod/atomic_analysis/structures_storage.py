@@ -54,14 +54,18 @@ class Structures_Storage:
         '''
         Sorts by given attributes.
         '''
-
+        if len(self) == 0:
+            return self
         new_seq = self._argsort(attrs)
 
         for name in self.structure_attrs_list:
-            sorted_data = [getattr(self, self.get_name(name))[i] for i in new_seq]
-            if isinstance(sorted_data[0], torch.Tensor):
-                sorted_data = torch.stack(sorted_data)
+            attr_value = getattr(self, self.get_name(name))
+            if isinstance(attr_value, torch.Tensor):
+                sorted_data = attr_value[new_seq]
+            else:
+                sorted_data = [attr_value[i] for i in new_seq]
             setattr(self, self.get_name(name), sorted_data)
+        return self
 
     def get_name(self, attr):
         return attr + 's' if not attr[-2:] == 'us' else attr[:-2] + 'i'
@@ -76,25 +80,43 @@ class Structures_Storage:
 
         if isinstance(sl, (slice, list, np.ndarray, torch.Tensor)):
             item_attrs = []
+            if isinstance(sl, torch.Tensor):
+                sl = sl.detach().cpu().tolist()
+            elif isinstance(sl, np.ndarray):
+                sl = sl.tolist()
             if isinstance(sl, slice):
 
                 for attr in self.structure_attrs_list:
                     item = getattr(self, self.get_name(attr))[sl]
                     item_attrs.append(item)
 
-            elif self.__sl_isintance(sl[0], (bool, np.bool_)):
+            elif len(sl) == 0:
 
                 for attr in self.structure_attrs_list:
                     attr_val = getattr(self, self.get_name(attr))
 
                     if isinstance(attr_val, torch.Tensor):
-                        item = attr_val[sl]
+                        item = attr_val[:0]
+                    else:
+                        item = []
+
+                    item_attrs.append(item)
+
+            elif self.__sl_isintance(sl[0], (bool, np.bool_)):
+                sl = [bool(item) for item in sl]
+
+                for attr in self.structure_attrs_list:
+                    attr_val = getattr(self, self.get_name(attr))
+
+                    if isinstance(attr_val, torch.Tensor):
+                        item = attr_val[torch.tensor(sl, dtype=torch.bool)]
                     else:
                         item = [attr_val[i] for i, bl in enumerate(sl) if bl]
 
                     item_attrs.append(item)
 
             elif self.__sl_isintance(sl[0], (int, np.integer)):
+                sl = [int(item) for item in sl]
 
                 for attr in self.structure_attrs_list:
                     attr_val = getattr(self, self.get_name(attr))
@@ -104,13 +126,10 @@ class Structures_Storage:
                         item = [attr_val[i] for i in sl]
                     item_attrs.append(item)
 
-            if len(item_attrs[0]) == 1:
-                if len(sl) == 1:
-                    return self.structure_class(self, ind=sl[0])
-                elif sum(sl) == 1:
-                    return self.structure_class(self, ind=np.argwhere(sl)[0][0])
-
-            return type(self)(self.structure_class, self.structure_attrs_list, *item_attrs)
+            new_storage = self.copy()
+            for attr, item in zip(self.structure_attrs_list, item_attrs):
+                setattr(new_storage, self.get_name(attr), item)
+            return new_storage
 
         elif isinstance(sl, int) or np.issubdtype(type(sl), np.integer):
             return self.structure_class(self, ind=sl)
@@ -247,12 +266,16 @@ class Pairs_Storage(Structures_Storage):
         return (nucl.leading_strand, nucl.resid)
 
     def sort(self):
+        if len(self) == 0:
+            return self.copy()
         new_seq = self._argsort(['lead_nucl_ind'])
 
         for name in self.structure_attrs_list:
-            sorted_data = [getattr(self, self.get_name(name))[i] for i in new_seq]
-            if isinstance(sorted_data[0], torch.Tensor):
-                sorted_data = torch.stack(sorted_data)
+            attr_value = getattr(self, self.get_name(name))
+            if isinstance(attr_value, torch.Tensor):
+                sorted_data = attr_value[new_seq]
+            else:
+                sorted_data = [attr_value[i] for i in new_seq]
             setattr(self, self.get_name(name), sorted_data)
 
         leading_strands = self.nucleotides_storage[getattr(self, self.get_name('lead_nucl_ind'))].leading_strands
@@ -264,10 +287,6 @@ class Pairs_Storage(Structures_Storage):
     def __getitem__(self, sl):
         item = super().__getitem__(sl)
         if isinstance(item, Pairs_Storage):
-            # print(self.nucleotides_storage)
-            # print(self.nucleotides_storage[0])
-            if self.nucleotides_storage[0] == 'lead_nucl_ind':
-                print(sl, self.nucleotides_storage)
             item.nucleotides_storage = self.nucleotides_storage
             return item
 
