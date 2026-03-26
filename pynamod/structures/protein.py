@@ -9,10 +9,22 @@ import torch
 from sklearn.neighbors import NearestNeighbors
 
 
+class Real_Space_Beads_Groups:
+    def __init__(self, ref_pair=None, eps=1, binded_dna_len=None, cg_structure=None):
+        self.ref_pair = ref_pair
+        if isinstance(eps, torch.Tensor):
+            self.eps = eps
+        else:
+            self.eps = torch.ones(n_cg_beads)*eps
+
+        self.binded_dna_len = binded_dna_len
+        self.cg_structure = cg_structure
+
+
 class Protein:
     '''This class contains protein model as coarse grained beads with radii and charges. This class is always related to CG structure that stores positions of CG beads in All_Coords object. Init function of this class requires pdb2pqr class if initialized from mda Universe without charges.'''
 
-    def __init__(self, mdaUniverse=None, n_cg_beads=50, ref_pair=None, eps=1, **kwards):
+    def __init__(self, mdaUniverse=None, n_cg_beads=50, ref_pair=None, eps=1, binded_dna_len=None, cg_structure=None, **kwards):
         self.n_cg_beads = n_cg_beads
 
         if mdaUniverse:
@@ -34,6 +46,9 @@ class Protein:
             self.eps = eps
         else:
             self.eps = torch.ones(n_cg_beads)*eps
+
+        self.binded_dna_len = binded_dna_len
+        self.cg_structure = cg_structure
 
         for name, value in kwards.items():
             setattr(self, name, value)
@@ -139,6 +154,9 @@ class Protein:
 
         self.charges = torch.from_numpy(self.charges)
         self.masses = torch.from_numpy(self.masses)
+
+    def __repr__(self):
+        return f'<Protein with {self.n_cg_beads} CG beads and linked to {self.ref_pair.ind}th pair>'
 
     @property
     def origins(self):

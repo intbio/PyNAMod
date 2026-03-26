@@ -112,10 +112,11 @@ class Structures_Storage:
 
             return type(self)(self.structure_class, self.structure_attrs_list, *item_attrs)
 
-        if isinstance(sl, int) or np.issubdtype(type(sl), np.integer):
+        elif isinstance(sl, int) or np.issubdtype(type(sl), np.integer):
             return self.structure_class(self, ind=sl)
 
-        raise IndexError('Wrong slice format')
+        else:
+            raise IndexError(f'Expected slice of type slice, list, np.ndarray, torch.Tensor or int, got {type(sl)}')
 
     def __iter__(self):
         for i in range(len(self)):
@@ -164,6 +165,11 @@ class Structures_Storage:
             attr = self.get_name(attr)
             if not isinstance(getattr(self, attr)[0], (Geometrical_Parameters, AtomGroup)):
                 group.create_dataset(attr, data=getattr(self, attr), **dataset_kwards)
+
+            elif isinstance(getattr(self, attr)[0], Geometrical_Parameters):
+                group.create_dataset('pair_params', data=torch.vstack([g.local_params[1] for g in getattr(self, attr)]), **dataset_kwards)
+                group.create_dataset('pair_ref_frames', data=torch.vstack([g.ref_frames[1].reshape(-1, 3, 3) for g in getattr(self, attr)]), **dataset_kwards)
+                group.create_dataset('pair_origins', data=torch.vstack([g.origins[1].reshape(-1, 3) for g in getattr(self, attr)]), **dataset_kwards)
 
     def load_from_h5(self, file, group_name):
         '''
@@ -219,6 +225,9 @@ class Nucleotides_Storage(Structures_Storage):
         new.mda_u = self.mda_u
         return new
 
+    def __repr__(self):
+        return f'<Storage with {len(self)} nucleotides>'
+
 
 class Pairs_Storage(Structures_Storage):
     '''
@@ -255,14 +264,29 @@ class Pairs_Storage(Structures_Storage):
     def __getitem__(self, sl):
         item = super().__getitem__(sl)
         if isinstance(item, Pairs_Storage):
-
+            # print(self.nucleotides_storage)
+            # print(self.nucleotides_storage[0])
+            if self.nucleotides_storage[0] == 'lead_nucl_ind':
+                print(sl, self.nucleotides_storage)
             item.nucleotides_storage = self.nucleotides_storage
             return item
 
         else:
             return item
 
+    def __repr__(self):
+        return f'<Storage with {len(self)} pairs>'
+
     def copy(self):
         new = super().copy()
         new.nucleotides_storage = self.nucleotides_storage
         return new
+
+    def load_from_h5(self, file, group_name):
+        super().load_from_h5(file, group_name)
+
+        pair_params = torch.tensor(file[group_name]['pair_params'])
+        ref_frames = torch.tensor(file[group_name]['pair_ref_frames'])
+        origins = torch.tensor(file[group_name]['pair_origins'])
+        params_sets = [[torch.vstack([torch.zeros(1, *p.shape), p.reshape(1, *p.shape)]) for p in (pars, oris, rfs)] for (pars, rfs, oris) in zip(pair_params, ref_frames, origins)]
+        self.geom_paramss = [Geometrical_Parameters(local_params=pars, origins=oris, ref_frames=rfs) for (pars, oris, rfs) in params_sets]

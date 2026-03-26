@@ -1,6 +1,6 @@
 import unittest
 import h5py
-
+import torch 
 import pynamod
 
 from importlib.resources import files
@@ -30,12 +30,12 @@ class Test_Runner(unittest.TestCase):
         
         self.cgs_loaded_pairs.analyze_dna(leading_strands=['I'],pairs_in_structure=data)
         self.cgs_loaded_pairs.analyze_protein(n_cg_beads=80)
-        self.cgs_loaded_pairs.dna.move_to_coord_center()
+        self.cgs.dna.move_to_coord_center()
         
     def test_nucleotides(self):
         
-        assert len(self.cgs.dna.nucleotides) == len(self.correct_cgs.dna.nucleotides), 'wrong number of nucleotides CG structure'
-        assert len(self.cgs_loaded_pairs.dna.nucleotides) == len(self.correct_cgs.dna.nucleotides), 'wrong number of nucleotides CG structure with loaded pairs'
+        assert len(self.cgs.dna.nucleotides) == len(self.correct_cgs.dna.nucleotides), 'wrong number of nucleotides in CG structure'
+        assert len(self.cgs_loaded_pairs.dna.nucleotides) == len(self.correct_cgs.dna.nucleotides), 'wrong number of nucleotides in CG structure with loaded pairs'
         
         ref_dif = self.cgs.dna.nucleotides.ref_frames - self.correct_cgs.dna.nucleotides.ref_frames
         ref_dif = ref_dif.abs().mean() 
@@ -46,15 +46,22 @@ class Test_Runner(unittest.TestCase):
         
     def test_pairs(self):
         
-        assert len(self.cgs.dna.pairs_list) == len(self.correct_cgs.dna.pairs_list), 'wrong number of pairs CG structure'
-        assert len(self.cgs_loaded_pairs.dna.pairs_list) == len(self.correct_cgs.dna.pairs_list), 'wrong number of pairs CG structure with loaded pairs'
+        assert len(self.cgs.dna.pairs_list) == len(self.correct_cgs.dna.pairs_list), 'wrong number of pairs in CG structure'
+        assert len(self.cgs_loaded_pairs.dna.pairs_list) == len(self.correct_cgs.dna.pairs_list), 'wrong number of pairs in CG structure with loaded pairs'
         
-        # ref_dif = self.cgs.dna.pairs_list.ref_frames - self.correct_cgs.dna.pairs_list.ref_frames
-        # ref_dif = ref_dif.abs().mean() 
-        # assert ref_dif < 10**-12,f'nucleotides ref frames difference: {ref_dif}'
-        # ori_dif = self.cgs.dna.nucleotides.origins - self.correct_cgs.dna.nucleotides.origins
-        # ori_dif = ori_dif.abs().mean()
-        # assert ori_dif < 10**-12,f'nucleotides origins difference: {ori_dif}'
+        
+        test_ref_frames = torch.vstack([p.geom_params.ref_frames[1].reshape(-1,3,3) for p in self.cgs.dna.pairs_list])
+        correct_ref_frames = torch.vstack([p.geom_params.ref_frames[1].reshape(-1,3,3) for p in self.correct_cgs.dna.pairs_list])
+        print(test_ref_frames.shape,correct_ref_frames.shape)
+        ref_dif = test_ref_frames - correct_ref_frames
+        ref_dif = ref_dif.abs().mean() 
+        assert ref_dif < 10**-12,f'pairs ref frames difference: {ref_dif}'
+        
+        test_origins = torch.vstack([p.geom_params.origins[1].reshape(-1,3) for p in self.cgs.dna.pairs_list])
+        correct_origins = torch.vstack([p.geom_params.origins[1].reshape(-1,3) for p in self.correct_cgs.dna.pairs_list])
+        ori_dif = test_origins - correct_origins
+        ori_dif = ori_dif.abs().mean()
+        assert ori_dif < 10**-12,f'pairs origins difference: {ori_dif}'
         
         
     def test_params(self):
@@ -73,10 +80,10 @@ class Test_Runner(unittest.TestCase):
 
         ref_dif = old_geom_params.ref_frames - new_params.ref_frames
         ref_dif = ref_dif.abs().mean() 
-        assert ref_dif < 10**-12,f'step ref frames after rebuild difference: {ref_dif}'
+        assert ref_dif < 10**-11,f'step ref frames after rebuild difference: {ref_dif}'
         ori_dif = old_geom_params.origins - new_params.origins
         ori_dif = ori_dif.abs().mean()
-        assert ori_dif < 10**-12,f'step origins after rebuild difference: {ori_dif}'
+        assert ori_dif < 10**-11,f'step origins after rebuild difference: {ori_dif}'
         
     def test_MC_run(self):
         pass

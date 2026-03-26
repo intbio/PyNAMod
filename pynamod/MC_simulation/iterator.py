@@ -82,7 +82,7 @@ class Iterator:
         init_ori = self.cg_structure.dna.geom_params.origins
 
         if self.cg_structure.proteins:
-            init_prot_ori = torch.vstack([protein.origins for protein in self.cg_structure.proteins])
+            init_prot_ori = torch.vstack([torch.tensor(protein.origins) for protein in self.cg_structure.proteins])
         else:
             init_prot_ori = torch.empty((0, 1, 3))
 
@@ -101,11 +101,13 @@ class Iterator:
         change_indices = self._get_cur_change_index(integration_mod)
         self._rotation_handler.apply_rotation(change_indices, self.trajectory)
 
-        e_dif_components, e_mat, s_mat = self.energy.get_energy_dif(self._rotation_handler, change_indices, self.prev_e)
+        e_dif_components, e_mat, s_mat = self.energy.get_energy_dif(self._rotation_handler, change_indices[1], self.prev_e)
 
         e_dif_components = torch.stack(e_dif_components)
-        # cur_e = torch.stack(self.energy.get_energy_components(self._rotation_handler,save_matr=False))
-        # print((cur_e - self.prev_e)[1:3],e_dif_components[1:3])
+        cur_e = torch.stack(self.energy.get_energy_components(self._rotation_handler, save_matr=False))
+        # d = ((cur_e - self.prev_e)[1:3] - e_dif_components[1:3])
+        # if abs(d[0]) > 10**-4 or abs(d[1]) > 10**-4:
+        #     print(d)
 
         Del_E = e_dif_components.sum()
 
@@ -113,7 +115,7 @@ class Iterator:
         self.total_step += 1
 
         if not Del_E.isnan() and Del_E < 0 or (not (torch.isinf(torch.exp(Del_E))) and (r <= torch.exp(-Del_E/self._scaled_KT))):
-            self.energy.update_matrices(e_mat, s_mat, change_indices)
+            self.energy.update_matrices(e_mat, s_mat, change_indices[1])
             self.prev_e += e_dif_components
             self.accepted_steps += 1
 

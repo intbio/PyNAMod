@@ -46,15 +46,13 @@ class Geometry_Functions:
             sl = (z1 * z2).sum(dim=1) < 0
             R1 = R1.clone()
             R1[sl, :, 1:] *= -1
+            z1 = R1[:, :, 2]
+
+        o1, o2 = self.origins[start_index:-1], self.origins[start_index + 1:]
 
         o1, o2 = self.origins[start_index:-1], self.origins[start_index + 1:]
 
         hinge = torch.linalg.cross(z1, z2)
-
-        hinge /= torch.norm(hinge, dim=1).reshape(-1, 1)
-        RollTilt = torch.arccos((z1*z2).sum(dim=1))
-        R_hinge = self._rmat(hinge, -0.5*RollTilt)
-        R2p = torch.matmul(R_hinge, R2)
 
         R1p = torch.matmul(self._rmat(hinge, 0.5*RollTilt), R1)
 

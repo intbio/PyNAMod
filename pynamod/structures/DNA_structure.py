@@ -42,6 +42,7 @@ class DNA_Structure:
             self.parse_pairs(pairs_in_structure)
         else:
             self.pairs_list = get_pairs(self)
+
         if len(self.pairs_list) == 0:
             raise TypeError('No pairs were found')
 
@@ -264,21 +265,21 @@ class DNA_Structure:
         self.eps = torch.tensor([self.pairs_list.epsilons])
         self.charges = torch.tensor([self.pairs_list.charges])
 
-    def __getter(self, attr):
+    def _getter(self, attr):
         return getattr(self.geom_params, attr)
 
-    def __setter(self, value, attr):
+    def _setter(self, value, attr):
         setattr(self.geom_params, attr, value)
 
-    def __set_property(attr):
-        return property(lambda self: self.__getter(attr=attr), lambda self, value: self.__setter(value, attr=attr))
+    def _set_property(attr):
+        return property(lambda self: self._getter(attr=attr), lambda self, value: self._setter(value, attr=attr))
 
     @property
     def trajectory(self):
         return self.geom_params.trajectory
 
-    step_params = __set_property('local_params')
-    ref_frames = __set_property('ref_frames')
+    step_params = _set_property('local_params')
+    ref_frames = _set_property('ref_frames')
 
     @property
     def origins(self):

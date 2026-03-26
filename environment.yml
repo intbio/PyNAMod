@@ -1,4 +1,4 @@
-name: pynamod
+name: pynamod2
 
 channels:
   - conda-forge
@@ -19,6 +19,7 @@ dependencies:
   - pytest
   - ipywidgets
   - onnxruntime
+  - networkx<3.6.1
 
   - pip:
       - --extra-index-url https://download.pytorch.org/whl/cu130
