@@ -50,11 +50,14 @@ class Geometry_Functions:
 
         o1, o2 = self.origins[start_index:-1], self.origins[start_index + 1:]
 
-        o1, o2 = self.origins[start_index:-1], self.origins[start_index + 1:]
-
         hinge = torch.linalg.cross(z1, z2)
 
-        R1p = torch.matmul(self._rmat(hinge, 0.5*RollTilt), R1)
+        hinge /= torch.norm(hinge, dim=1).reshape(-1, 1)
+        RollTilt = torch.arccos((z1 * z2).sum(dim=1).clamp(-1.0, 1.0))
+        R_hinge = self._rmat(hinge, -0.5 * RollTilt)
+        R2p = torch.matmul(R_hinge, R2)
+
+        R1p = torch.matmul(self._rmat(hinge, 0.5 * RollTilt), R1)
 
         twist = torch.arccos((R1p[:, :, 1] * R2p[:, :, 1]).sum(dim=1))
         twist[twist.isnan()] = 0

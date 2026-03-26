@@ -82,7 +82,10 @@ class Iterator:
         init_ori = self.cg_structure.dna.geom_params.origins
 
         if self.cg_structure.proteins:
-            init_prot_ori = torch.vstack([torch.tensor(protein.origins) for protein in self.cg_structure.proteins])
+            init_prot_ori = torch.vstack([
+                p.origins.detach().clone() if isinstance(p.origins, torch.Tensor) else torch.as_tensor(p.origins)
+                for p in self.cg_structure.proteins
+            ])
         else:
             init_prot_ori = torch.empty((0, 1, 3))
 

@@ -1,5 +1,7 @@
 import io
+import shutil
 import subprocess
+import sys
 import tempfile
 
 import MDAnalysis as mda
@@ -37,7 +39,10 @@ class Protein:
                 if not hasattr(mdaUniverse.atoms, 'formalcharges'):
                     mdaUniverse.universe.add_TopologyAttr('formalcharges')
                 mdaUniverse.atoms.write(pdb_temp.name)
-                process = subprocess.run(['pdb2pqr', '--ff=AMBER', '--log-level=CRITICAL', pdb_temp.name, pqr_temp.name])
+                cmd = ['pdb2pqr', '--ff=AMBER', '--log-level=CRITICAL', pdb_temp.name, pqr_temp.name]
+                if shutil.which('pdb2pqr') is None:
+                    cmd = [sys.executable, '-m', 'pdb2pqr', '--ff=AMBER', '--log-level=CRITICAL', pdb_temp.name, pqr_temp.name]
+                process = subprocess.run(cmd)
                 self.u = mda.Universe(pqr_temp.name)
         else:
             self.u = None

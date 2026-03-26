@@ -281,7 +281,7 @@ class Nucleotide:
             else:
                 u = get_base_u(self.restype)
 
-            exp_sel, stand_sel, _ = check_if_nucleotide(residue, candidates=[self.restype])
+            exp_sel, stand_sel, _ = check_if_nucleotide(u, candidates=[self.restype])
             self._setter('s_residue', sum(stand_sel))
             self._setter('e_residue', sum(exp_sel))
             value = exp_sel
@@ -343,7 +343,7 @@ def get_all_nucleotides(DNA_Structure, leading_strands, sel, use_full_nucleotide
             if base != '':
                 leading_strand = residue.segid in leading_strands
                 R, o = get_base_ref_frame(sum(stand_sel), sum(exp_sel))
-                nucleotides_data.append(base, residue_str, residue.resid, residue.segid, leading_strand, R, o.reshape(1, 3), sum(stand_sel), sum(exp_sel), None)
+                nucleotides_data.append(base, residue.resid, residue.segid, leading_strand, R, o.reshape(1, 3), sum(stand_sel), sum(exp_sel), None)
 
     if len(nucleotides_data) == 0:
         raise ValueError('No nucleotides found.')

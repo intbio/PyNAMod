@@ -10,7 +10,8 @@ import torch
 from MDAnalysis.analysis import align
 from MDAnalysis.coordinates.memory import MemoryReader
 
-from pynamod.atomic_analysis.mda_element_guess import add_guessed_elements, load_pdb_universe
+from pynamod.atomic_analysis.mda_element_guess import (add_guessed_elements,
+                                                       load_pdb_universe)
 from pynamod.structures.DNA_structure import DNA_Structure
 from pynamod.structures.protein import Protein
 
@@ -57,14 +58,12 @@ class CG_Structure:
         else:
             self.proteins = []
 
+    def __repr__(self):
+        n_pairs = len(self.dna.pairs_list) if getattr(self.dna, 'pairs_list', None) else 0
+        return f'<CG_Structure DNA_pairs={n_pairs} proteins={len(self.proteins)}>'
+
     def analyze_dna(self, leading_strands=None, pairs_in_structure=None, sel='(type C or type O or type N) and not protein',
                     trajectory=None, overwrite_existing_dna=False, movable=False, use_full_nucleotide=False):
-
-    def analyze_dna(self, leading_strands=None, pairs_in_structure=None, sel='(type C or type O or type N) and not protein',
-                    trajectory=None, overwrite_existing_dna=False, movable=False):
-
-
->>>>>> > upstream/master
         '''Method that runs analysis of mda Universe and trajectory if given.
 
             Arguments:
@@ -88,14 +87,6 @@ class CG_Structure:
             self.dna.analyze_trajectory(trajectory)
 
     def build_dna(self, sequence, movable=True):
-        self.dna.build_from_u(leading_strands,pairs_in_structure,len(trajectory)+1,sel,overwrite_existing_dna,movable=movable)
-
-        if len(trajectory) != 0:
-            self.dna.analyze_trajectory(trajectory)
-
-        self._add_nucleotides()
-
-    def build_dna(self,sequence,movable=True):
         '''Method that runs generation of linear DNA structure with given sequence. Each pair of nucleotides and each step of pairs gains similar average BDNA parameters.
 
             Arguments:
@@ -107,15 +98,15 @@ class CG_Structure:
         if self.dna.pairs_list:
             raise ValueError('DNA was already initialized for this CG Structure.')
 
-        self.dna.generate(sequence,movable=movable)
+        self.dna.generate(sequence, movable=movable)
         self._add_nucleotides()
 
-    def save_to_h5(self,file,**dataset_kwards):
-        self.dna.save_to_h5(file,**dataset_kwards)
-        for i,protein in enumerate(self.proteins):
-            protein.save_to_h5(file,group_name=f'protein_{i}_CG_parameters',**dataset_kwards)
+    def save_to_h5(self, file, **dataset_kwards):
+        self.dna.save_to_h5(file, **dataset_kwards)
+        for i, protein in enumerate(self.proteins):
+            protein.save_to_h5(file, group_name=f'protein_{i}_CG_parameters', **dataset_kwards)
 
-    def load_from_h5(self,file):
+    def load_from_h5(self, file):
         self.dna.load_from_h5(file)
         i = 0
         while True:
@@ -146,7 +137,7 @@ class CG_Structure:
             ref_index = len(self.dna.pairs_list)//2
         if protein_u is None:
             protein_u = self.u.select_atoms('protein')
-            if hasattr(protein_u,'altLocs'):
+            if hasattr(protein_u, 'altLocs'):
                 protein_u = protein_u[protein_u.altLocs == '']
 
         if binded_dna_len is None:
@@ -156,10 +147,9 @@ class CG_Structure:
         new.cg_structure = self
         new.build_model(self.dna)
         self.proteins.append(new)
-        self.proteins = sorted(self.proteins,key=lambda p: p.ref_pair.ind)
+        self.proteins = sorted(self.proteins, key=lambda p: p.ref_pair.ind)
 
-
-    def get_cg_mda_traj(self,allign_sel='all'):
+    def get_cg_mda_traj(self, allign_sel='all'):
         '''Method that creates trajectory of CG model as a mda Universe.
 
             Arguments:
@@ -169,14 +159,14 @@ class CG_Structure:
 
         n_parts = sum([protein.n_cg_beads for protein in self.proteins])
 
-        segids = [item for i,protein in enumerate(self.proteins) for item in [i]*protein.n_cg_beads]
+        segids = [item for i, protein in enumerate(self.proteins) for item in [i]*protein.n_cg_beads]
         resnames = ['prot']*n_parts
         resids = np.arange(n_parts)
         coords = []
         for ts in self.dna.trajectory:
-            frame_coord = torch.tensor(self.dna.origins.reshape(1, -1, 3))
+            frame_coord = self.dna.origins.reshape(1, -1, 3).detach().clone()
             if self.proteins:
-                frame_coord = torch.vstack([protein.origins for protein in self.proteins]).reshape(1,-1,3)
+                frame_coord = torch.vstack([protein.origins for protein in self.proteins]).reshape(1, -1, 3)
             coords.append(frame_coord)
         coords = torch.cat(coords).numpy()
         n_frames = coords.shape[0]
@@ -191,6 +181,8 @@ class CG_Structure:
         u.add_TopologyAttr('segid', segid_names)
         u.add_TopologyAttr('charge', self.charges)
         u.add_TopologyAttr('radius', self.radii)
+        # AlignTraj matches atoms by mass; empty universes lack masses by default.
+        u.add_TopologyAttr('masses', self.masses.detach().cpu().numpy().astype(np.float64))
         u.load_new(coords, format=MemoryReader)
         alignment = align.AlignTraj(u, u, in_memory=True, select=allign_sel)
         alignment.run()
@@ -214,15 +206,14 @@ class CG_Structure:
             max_charge = all_charges.abs().max().ceil().item()
         norm = mpl.colors.Normalize(-max_charge, max_charge)
         cb = mpl.colorbar.Colorbar(ax, orientation='horizontal',
-                                       cmap='bwr_r',
-                                       norm=norm,
-                                       label='charge',
-                                       ticks=[-max_charge,0,max_charge])
-
+                                   cmap='bwr_r',
+                                   norm=norm,
+                                   label='charge',
+                                   ticks=[-max_charge, 0, max_charge])
 
         colors = np.array([cb.cmap(norm(c))[:3] for c in self.charges]).flatten().tolist()
-        view.shape.add_buffer('sphere',position=self.origins.flatten().tolist(),
-                              color=colors,radius=self.radii.tolist())
+        view.shape.add_buffer('sphere', position=self.origins.flatten().tolist(),
+                              color=colors, radius=self.radii.tolist())
 
         if disable_charge_bar:
             plt.close(fig)
@@ -278,32 +269,31 @@ class CG_Structure:
         for protein in self.proteins:
             protein.to(device)
 
-
-    def _add_nucleotides(self,model_type='1spnp'):
+    def _add_nucleotides(self, model_type='1spnp'):
         '''Supported models:
         - 1spnp
         - 1spn
         '''
         nucl_masses = {
-                    'A':346.2212,
-                    'T':321.2085,
-                    'C':322.198,
-                    'G':362.223
-                        }
+            'A': 346.2212,
+            'T': 321.2085,
+            'C': 322.198,
+            'G': 362.223
+        }
         for pair in self.dna.pairs_list:
             if model_type == '1spn':
 
                 lead_nucl_u = pair.lead_nucl.res_atoms
                 lag_nucl_u = pair.lag_nucl.res_atoms
 
-                radii = torch.tensor([lead_nucl_u.radius_of_gyration(),lag_nucl_u.radius_of_gyration()])
-                charges = torch.tensor([-1,-1])
-                origins = torch.from_numpy(np.vstack([lead_nucl_u.center_of_mass(),lag_nucl_u.center_of_mass()]).reshape(-1,1,3))
-                masses = torch.tensor([lead_nucl_u.masses.sum(),lag_nucl_u.masses.sum()])
+                radii = torch.tensor([lead_nucl_u.radius_of_gyration(), lag_nucl_u.radius_of_gyration()])
+                charges = torch.tensor([-1, -1])
+                origins = torch.from_numpy(np.vstack([lead_nucl_u.center_of_mass(), lag_nucl_u.center_of_mass()]).reshape(-1, 1, 3))
+                masses = torch.tensor([lead_nucl_u.masses.sum(), lag_nucl_u.masses.sum()])
                 ind = pair.ind
-                ref_vectors = torch.matmul((origins - self.dna.origins[ind]),self.dna.ref_frames[ind])
+                ref_vectors = torch.matmul((origins - self.dna.origins[ind]), self.dna.ref_frames[ind])
 
-                self.proteins.append(Protein(n_cg_beads=2,ref_pair=pair,ref_vectors=ref_vectors,charges=charges,masses=masses,radii=radii,cg_structure=self,binded_dna_len = 1))
+                self.proteins.append(Protein(n_cg_beads=2, ref_pair=pair, ref_vectors=ref_vectors, charges=charges, masses=masses, radii=radii, cg_structure=self, binded_dna_len=1))
             elif model_type == '1spnp':
                 radii = torch.tensor([10])
                 charges = torch.tensor([-2])
@@ -313,12 +303,11 @@ class CG_Structure:
                 ind = pair.ind
                 ref_vectors = torch.zeros(3)
 
-                self.proteins.append(Protein(n_cg_beads=1,ref_pair=pair,ref_vectors=ref_vectors,charges=charges,masses=masses,radii=radii,cg_structure=self,binded_dna_len = 1))
+                self.proteins.append(Protein(n_cg_beads=1, ref_pair=pair, ref_vectors=ref_vectors, charges=charges, masses=masses, radii=radii, cg_structure=self, binded_dna_len=1))
 
-        self.proteins = sorted(self.proteins,key=lambda p: p.ref_pair.ind)
+        self.proteins = sorted(self.proteins, key=lambda p: p.ref_pair.ind)
 
-
-    def __getitem__(self,sl):
+    def __getitem__(self, sl):
         it = self.copy()
         it.dna.__getitem__(sl)
         proteins = []
@@ -347,3 +336,7 @@ class CG_Structure:
     @property
     def charges(self):
         return torch.cat([protein.charges for protein in self.proteins])
+
+    @property
+    def masses(self):
+        return torch.cat([protein.masses for protein in self.proteins])

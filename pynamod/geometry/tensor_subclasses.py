@@ -5,7 +5,12 @@ class mod_Tensor(torch.Tensor):
     geom_class = None
 
     def __new__(cls, x, geom_class, *args, **kwargs):
-        return super().__new__(cls, x, *args, **kwargs)
+        # Do not use Tensor.__new__(cls, tensor); it triggers torch.tensor(tensor) UserWarning.
+        # See https://pytorch.org/docs/stable/notes/extending.html#subclassing-torch-tensor
+        t = torch.as_tensor(x)
+        if isinstance(x, torch.Tensor):
+            t = t.clone().detach()
+        return t.as_subclass(cls)
 
     def __init__(self, x, geom_class, *args, **kwards):
         self.geom_class = geom_class

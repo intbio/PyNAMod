@@ -5,6 +5,21 @@ import torch
 from pynamod.geometry.tensor_subclasses import Origins_Tensor, mod_Tensor
 
 
+def open_h5(filename, mode='r', **kwargs):
+    '''Open an HDF5 file; disable POSIX locking when supported (h5py >= 3.5).
+
+    Network filesystems (NFS, Lustre, etc.) often fail synchronous locks with
+    BlockingIOError (errno 11). For h5py < 3.5, set HDF5_USE_FILE_LOCKING=FALSE
+    in the environment before opening files.
+    '''
+    kwargs.setdefault('locking', False)
+    try:
+        return h5py.File(filename, mode, **kwargs)
+    except TypeError:
+        kwargs.pop('locking', None)
+        return h5py.File(filename, mode, **kwargs)
+
+
 class Trajectory:
     '''Class that processes trajectories of given parameters. It stores created trajectories for each given parameter and link to the class with current step of trajectories (could be self). All parameters are then should be defined as property using get_property_from_tr.'''
 
@@ -36,6 +51,19 @@ class Trajectory:
 
 
 class Tensor_Trajectory(Trajectory):
+    @staticmethod
+    def _is_plain_tensor_factory(traj_class):
+        # Iterator passes torch.tensor; torch.tensor(zeros_tensor) triggers UserWarning.
+        return traj_class is torch.tensor
+
+    def _make_traj_storage(self, data):
+        '''Plain torch.tensor factory: use zeros/slices directly; mod_Tensor gets (data, *attrs).'''
+        if self._is_plain_tensor_factory(self.traj_class):
+            if isinstance(data, torch.Tensor):
+                return data.clone().detach()
+            return torch.as_tensor(data, dtype=self.dtype)
+        return self.traj_class(data, *self.traj_class_attrs)
+
     def __init__(self, dtype, traj_len, data_len, traj_class, *traj_class_attrs, attrs_names=None, shapes=None):
         self.shapes = [(traj_len, data_len, 1, 3), (traj_len, data_len, 3, 3), (traj_len, data_len, 6)]
         self.dtype = dtype
@@ -46,7 +74,8 @@ class Tensor_Trajectory(Trajectory):
             self.shapes += shapes
         super().__init__(attrs_names)
         for shape, attr in zip(self.shapes, self.attrs_names):
-            setattr(self, f'{attr}_traj', traj_class(torch.zeros(*shape, dtype=dtype), *traj_class_attrs))
+            z = torch.zeros(*shape, dtype=dtype)
+            setattr(self, f'{attr}_traj', z if self._is_plain_tensor_factory(traj_class) else traj_class(z, *traj_class_attrs))
 
     def copy(self, *traj_class_attrs):
         if not traj_class_attrs:
@@ -59,7 +88,11 @@ class Tensor_Trajectory(Trajectory):
 
     def to(self, device):
         for attr in self.attrs_names:
-            setattr(self, f'{attr}_traj', self.traj_class(self.get_attr_trajectory(attr)).to(device))
+            t = self.get_attr_trajectory(attr)
+            if self._is_plain_tensor_factory(self.traj_class):
+                setattr(self, f'{attr}_traj', t.to(device))
+            else:
+                setattr(self, f'{attr}_traj', self.traj_class(t, *self.traj_class_attrs).to(device))
 
     def extend(self, other_traj=None, **values_to_extend):
 
@@ -69,7 +102,11 @@ class Tensor_Trajectory(Trajectory):
                 value = other_traj.get_attr_trajectory(attr)
             else:
                 value = values_to_extend[attr]
-            setattr(self, f'{attr}_traj', torch.concat([tensor, torch.tensor(value)]))
+            if isinstance(value, torch.Tensor):
+                tail = value
+            else:
+                tail = torch.as_tensor(value, dtype=self.dtype, device=tensor.device)
+            setattr(self, f'{attr}_traj', torch.concat([tensor, tail]))
 
     def add_attr(self, attr, shape):
         if attr in self.attrs:
@@ -78,7 +115,12 @@ class Tensor_Trajectory(Trajectory):
         self.res_trajectory.attrs_names.append(attr)
         self.res_trajectory.shapes.append(shape)
 
-        setattr(self, f'{attr}_traj', self.traj_class(torch.zeros((len(self), *shape), dtype=self.dtype), *self.traj_class_attrs))
+        z = torch.zeros((len(self), *shape), dtype=self.dtype)
+        setattr(
+            self,
+            f'{attr}_traj',
+            z if self._is_plain_tensor_factory(self.traj_class) else self.traj_class(z, *self.traj_class_attrs),
+        )
 
     def get_attr_trajectory(self, attr):
         return getattr(self, attr+'_traj')
@@ -112,7 +154,8 @@ class Tensor_Trajectory(Trajectory):
         new.attrs_names = self.attrs_names
 
         for attr in self.attrs_names:
-            setattr(new, f'{attr}_traj', self.traj_class(self.get_attr_trajectory(attr)[sl], *self.traj_class_attrs))
+            chunk = self.get_attr_trajectory(attr)[sl]
+            setattr(new, f'{attr}_traj', new._make_traj_storage(chunk))
 
         return new
 
@@ -124,7 +167,7 @@ class H5_Trajectory(Trajectory):
         else:
             self.shapes = [(data_len, 1, 3), (data_len, 3, 3), (data_len, 6)]
         super().__init__(attrs_names)
-        self.file = h5py.File(filename, mode)
+        self.file = open_h5(filename, mode)
         self._dataset_kwards = kwards
         self.string_format_val = string_format_val
         if mode in ('w', 'x', 'w-'):
@@ -135,6 +178,13 @@ class H5_Trajectory(Trajectory):
 
         elif mode in ('r+', 'a'):
             self._last_frame_ind = self.cur_step = len(self.file) - 1
+
+    def _empty_dataset_kwargs(self):
+        # h5py: creating dataset with only shape requires explicit dtype (default was float32 / 'f4').
+        kw = dict(self._dataset_kwards)
+        if 'dtype' not in kw and 'data' not in kw:
+            kw['dtype'] = np.float32
+        return kw
 
     def extend(self, other_traj=None, **values_to_extend):
         if other_traj:
@@ -160,7 +210,8 @@ class H5_Trajectory(Trajectory):
         self.shapes.append(shape)
 
         for i in range(len(self)):
-            self.file[str(i).zfill(self.string_format_val)].create_dataset(attr, shape=shape, **self._dataset_kwards)
+            self.file[str(i).zfill(self.string_format_val)].create_dataset(
+                attr, shape=shape, **self._empty_dataset_kwargs())
 
     def add_frame(self, step, **attrs):
         if step > self._last_frame_ind:
@@ -179,7 +230,7 @@ class H5_Trajectory(Trajectory):
             frame_ind = str(frame_ind).zfill(self.string_format_val)
             frame = self.file.create_group(frame_ind)
             for attr_name, shape in zip(self.attrs_names, self.shapes):
-                ds = frame.create_dataset(attr_name, shape=shape, **self._dataset_kwards)
+                ds = frame.create_dataset(attr_name, shape=shape, **self._empty_dataset_kwargs())
         else:
             raise KeyError('frame creation failed, frame already exists')
 

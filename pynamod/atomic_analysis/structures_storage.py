@@ -285,8 +285,8 @@ class Pairs_Storage(Structures_Storage):
     def load_from_h5(self, file, group_name):
         super().load_from_h5(file, group_name)
 
-        pair_params = torch.tensor(file[group_name]['pair_params'])
-        ref_frames = torch.tensor(file[group_name]['pair_ref_frames'])
-        origins = torch.tensor(file[group_name]['pair_origins'])
+        pair_params = torch.as_tensor(np.asarray(file[group_name]['pair_params']))
+        ref_frames = torch.as_tensor(np.asarray(file[group_name]['pair_ref_frames']))
+        origins = torch.as_tensor(np.asarray(file[group_name]['pair_origins']))
         params_sets = [[torch.vstack([torch.zeros(1, *p.shape), p.reshape(1, *p.shape)]) for p in (pars, oris, rfs)] for (pars, rfs, oris) in zip(pair_params, ref_frames, origins)]
         self.geom_paramss = [Geometrical_Parameters(local_params=pars, origins=oris, ref_frames=rfs) for (pars, oris, rfs) in params_sets]
