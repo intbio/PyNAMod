@@ -221,6 +221,21 @@ class Nucleotide:
     def _getter(self, attr):
         return getattr(self.storage_class, self.storage_class.get_name(attr))[self.ind]
 
+    def _get_frame_residues(self):
+        # Always derive the reference frame from base-only atoms even if the
+        # stored residue selection contains the full nucleotide for graph usage.
+        if self.storage_class.mda_u is not None:
+            residue = self.storage_class.mda_u.select_atoms(f'resid {self.resid} and segid {self.segid}')
+        else:
+            residue = get_base_u(self.restype)
+
+        exp_sel, stand_sel, _ = check_if_nucleotide(
+            residue,
+            candidates=[self.restype],
+            use_full_nucleotide=False
+        )
+        return sum(stand_sel), sum(exp_sel)
+
     def _set_property(attr):
         def setter(self, value): return self._setter(value, attr=attr)
         def getter(self): return self._getter(attr=attr)
@@ -236,7 +251,8 @@ class Nucleotide:
     def origin(self):
         value = self._getter('origin')
         if value is None:
-            R, o = get_base_ref_frame(self.s_residue, self.e_residue)
+            s_frame_residue, e_frame_residue = self._get_frame_residues()
+            R, o = get_base_ref_frame(s_frame_residue, e_frame_residue)
             self._setter('ref_frame', R)
             self._setter('origin', o)
             value = o
@@ -250,7 +266,8 @@ class Nucleotide:
     def ref_frame(self):
         value = self._getter('ref_frame')
         if value is None:
-            R, o = get_base_ref_frame(self.s_residue, self.e_residue)
+            s_frame_residue, e_frame_residue = self._get_frame_residues()
+            R, o = get_base_ref_frame(s_frame_residue, e_frame_residue)
             self._setter('ref_frame', R)
             self._setter('origin', o)
             value = R
@@ -342,7 +359,17 @@ def get_all_nucleotides(DNA_Structure, leading_strands, sel, use_full_nucleotide
             exp_sel, stand_sel, base = check_if_nucleotide(residue_str, use_full_nucleotide=use_full_nucleotide)
             if base != '':
                 leading_strand = residue.segid in leading_strands
-                R, o = get_base_ref_frame(sum(stand_sel), sum(exp_sel))
+                if use_full_nucleotide:
+                    # Keep the full selection for downstream graph building,
+                    # but compute the frame from base-only atoms.
+                    frame_exp_sel, frame_stand_sel, _ = check_if_nucleotide(
+                        residue_str,
+                        candidates=[base],
+                        use_full_nucleotide=False
+                    )
+                    R, o = get_base_ref_frame(sum(frame_stand_sel), sum(frame_exp_sel))
+                else:
+                    R, o = get_base_ref_frame(sum(stand_sel), sum(exp_sel))
                 nucleotides_data.append(base, residue.resid, residue.segid, leading_strand, R, o.reshape(1, 3), sum(stand_sel), sum(exp_sel), None)
 
     if len(nucleotides_data) == 0:

@@ -106,7 +106,8 @@ class DNA_Structure:
                 self.geom_params.trajectory.cur_step += 1
 
                 for i in range(len(self.nucleotides)):
-                    R, o = get_base_ref_frame(self.nucleotides.s_residues[i], self.nucleotides.e_residues[i])
+                    s_frame_residue, e_frame_residue = self.nucleotides[i]._get_frame_residues()
+                    R, o = get_base_ref_frame(s_frame_residue, e_frame_residue)
                     self.nucleotides.ref_frames[i] = R
                     self.nucleotides.origins[i] = o
                 for pair in self.pairs_list:
