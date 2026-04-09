@@ -2,7 +2,6 @@ import numpy as np
 import torch
 import pickle
 from itertools import combinations
-from more_itertools import pairwise
 from scipy.spatial.transform import Rotation as R
 from scipy.spatial.distance import pdist
 from pynamod.geometry.geometrical_parameters import Geometrical_Parameters

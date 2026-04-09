@@ -1,7 +1,6 @@
 import torch
 
-from pynamod.geometry.trajectories import Tensor_Trajectory,H5_Trajectory
-from pynamod.geometry.bp_step_geometry import Geometry_Functions
+from pynamod.geometry.trajectories import Tensor_Trajectory, H5_Trajectory
 from pynamod.geometry.bp_step_geometry import Geometry_Functions
 from pynamod.geometry.tensor_subclasses import mod_Tensor
 

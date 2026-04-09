@@ -10,28 +10,26 @@ class Trajectory:
         self.attrs_names = ['origins','ref_frames','local_params']
         if attrs_names:
             self.attrs_names += attrs_names
-            
+
         self.cur_step = 0  
         self.traj_step = 1
-        
+
     def __iter__(self):
         self.cur_step = 0
         for i in range(len(self)):
-            
+
             yield self.cur_step
             self.cur_step += self.traj_step
-            
+
         self.cur_step = 0
-        
+
     origins = property(fset=lambda self,value: self._set_frame_attr('origins',value),
                        fget=lambda self: self._get_frame_attr('origins'))
     ref_frames = property(fset=lambda self,value: self._set_frame_attr('ref_frames',value),
                           fget=lambda self: self._get_frame_attr('ref_frames'))
     local_params = property(fset=lambda self,value: self._set_frame_attr('local_params',value),
                             fget=lambda self: self._get_frame_attr('local_params'))
-    prot_origins = property(fset=lambda self,value: self._set_frame_attr('prot_origins',value),
-                       fget=lambda self: self._get_frame_attr('prot_origins'))
-        
+
 
 class Tensor_Trajectory(Trajectory):
     def __init__(self,dtype,traj_len,data_len,traj_class,*traj_class_attrs,attrs_names=None,shapes=None):
@@ -45,23 +43,23 @@ class Tensor_Trajectory(Trajectory):
         super().__init__(attrs_names)
         for shape,attr in zip(self.shapes,self.attrs_names):
             setattr(self,f'{attr}_traj',traj_class(torch.zeros(*shape,dtype=dtype),*traj_class_attrs))
-                
-    
+
+
     def copy(self,*traj_class_attrs):
         if not traj_class_attrs:
             traj_class_attrs = self.traj_class_attrs
         new = Tensor_Trajectory(bool,1,1,torch.tensor,attrs_names=self.attrs_names[3:],shapes=self.shapes[3:])
         for attr in self.attrs_names:
             setattr(new,f'{attr}_traj',self.traj_class(self.get_attr_trajectory(attr),*traj_class_attrs))
-        
+
         return new
-    
+
     def to(self,device):
         for attr in self.attrs_names:
             setattr(self,f'{attr}_traj',self.traj_class(self.get_attr_trajectory(attr)).to(device))
 
     def extend(self,other_traj=None,**values_to_extend):
-        
+
         for attr in self.attrs_names:
             tensor = self.get_attr_trajectory(attr)
             if other_traj:

@@ -15,18 +15,18 @@ This module contains functions to analyze given residues in pdb structures to de
 def get_base_u(base_type,nucleotides_pdb=nucleotides_pdb):
     '''
     Function that is used to properly open standard mda universe of a nucleotide of a given type.
-    
+
     Attributes:
-    
+
     **base_type** - string, used as a key for dictionary of standard pdb structures.
-    
+
     **nucleotides_pdb** - dictionary of standard pdb structures.
-    
+
     Returns:
-    
+
     **mdaUniverse** with element types.
     '''
-    
+
     base_u = mda.Universe(io.StringIO(nucleotides_pdb[base_type]), format='PDB')
     base_u.add_TopologyAttr('elements', [guess_atom_element(name) for name in base_u.atoms.names])
     return base_u.atoms
@@ -34,15 +34,15 @@ def get_base_u(base_type,nucleotides_pdb=nucleotides_pdb):
 def build_graph(mda_structure, d_threshold=1.6):
     '''
     Creates a graph with nodes representing atoms with their element type and edges representing bonds from mda structure.
-    
+
     Attributes:
-    
+
     **mda_structure** - mda universe to create a graph from.
-    
+
     **d_threshold** - a cutt off used to guess bonds between atoms. If the distance between two atoms is smaller than cut off an edge between them will be added to graph.
-    
+
     Returns:
-    
+
     **graph** - created graph.
     '''
     coords = mda_structure.positions
@@ -66,7 +66,8 @@ def _check_atom_name(node1, node2):
     '''
     return node1['el'] == node2['el']
 
-def get_base_ref_frame(s_res,e_res):
+
+def get_base_ref_frame(s_res, e_res):
     '''
     Calculate R frame and origin with the same algorithm as in 3dna.
 
@@ -79,8 +80,8 @@ def get_base_ref_frame(s_res,e_res):
 
     **R**, **o** - torch.Tensor R frame and origin of nucleotide with shapes (3,3) and (1,3).
     '''
-    s_coord = s_res.positions
-    e_coord = e_res.positions
+    s_coord = s_res.positions.astype(np.float64)
+    e_coord = e_res.positions.astype(np.float64)
 
     s_ave = torch.from_numpy(np.mean(s_coord, axis=0))
     e_ave = torch.from_numpy(np.mean(e_coord, axis=0))
@@ -120,7 +121,7 @@ for base in ['A', 'T', 'G', 'C', 'U']:
 atoms_to_exclude = {'A': [5], 'T': [2, 5, 8], 'G': [5, 8], 'C': [2, 5], 'U': []}
 
 
-def check_if_nucleotide(residue, base_graphs=base_graphs,candidates = ['G', 'T', 'A', 'C', 'U'], use_full_nucleotide=False):
+def check_if_nucleotide(residue, base_graphs=base_graphs, candidates = ['G', 'T', 'A', 'C', 'U'], use_full_nucleotide=False):
     # TODO: tune speed
     '''
     Finds if atoms of a given residue is nucleotide and gets it type. This function constructs graph of an experimental residue and determines if standard graph is subgraph of it. Then atoms that are not needed in further analysis are removed.

@@ -1,21 +1,20 @@
 import pandas as pd
 import numpy as np
 import torch
-import nglview as nv
 from Bio.Seq import Seq
-
 from tqdm.auto import tqdm
-from pynamod.geometry.trajectories import H5_Trajectory,Tensor_Trajectory
-from pynamod.energy.energy_constants import get_consts_olson_98,BDNA_step
+from pynamod.geometry.trajectories import H5_Trajectory, Tensor_Trajectory
+from pynamod.energy.energy_constants import get_consts_olson_98, BDNA_step
 from pynamod.geometry.geometrical_parameters import Geometrical_Parameters
-from pynamod.atomic_analysis.nucleotides_parser import get_all_nucleotides, Nucleotide,get_base_ref_frame
+from pynamod.atomic_analysis.nucleotides_parser import get_all_nucleotides, Nucleotide, get_base_ref_frame
 from pynamod.atomic_analysis.pairs_parser import get_pairs, Base_Pair
-from pynamod.atomic_analysis.structures_storage import Nucleotides_Storage,Pairs_Storage
+from pynamod.atomic_analysis.structures_storage import Nucleotides_Storage, Pairs_Storage
 from pynamod.geometry.tensor_subclasses import mod_Tensor
+
 
 class DNA_Structure:
     '''Class that stores information about DNA, pairs in it. Geometrical parameters in this class are links to the other class (All_Coords) that manages them.
-    
+
         Main attributes of this class are:
         
         - **pairs_list** - list of Pair class objects. 
