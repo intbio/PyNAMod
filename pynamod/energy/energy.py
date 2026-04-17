@@ -36,7 +36,7 @@ class Energy:
         self.KT = KT/10**kiloj_order
         self.restraints = []
 
-    def set_energy_matrices(self,CG_structure,ignore_neighbors=5,ignore_rlsp_group_neighbors=5,set_dist_mat_sl=True):
+    def set_energy_matrices(self,CG_structure,ignore_neighbors=5,set_dist_mat_sl=True):
         '''Creates matrices for energy calculation.
 
             Attributes:
@@ -46,7 +46,7 @@ class Energy:
             **ignore_neighbors** - number of neigboring dna pairs (in both sides) interactions with which are ignored in real space. Deafult 5.
             '''
         self._elastic_e_calc.set_energy_matrices(CG_structure)
-        self._real_space_calc.set_energy_matrices(CG_structure,ignore_neighbors,ignore_rlsp_group_neighbors,set_dist_mat_sl)
+        self._real_space_calc.set_energy_matrices(CG_structure,ignore_neighbors,set_dist_mat_sl)
 
     def add_restraints(self,restraints=None,restraint_type=None,CG_structure=None,scaling_factor=1):
         '''

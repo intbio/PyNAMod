@@ -31,7 +31,7 @@ def get_base_u(base_type,nucleotides_pdb=nucleotides_pdb):
     base_u.add_TopologyAttr('elements', [guess_atom_element(name) for name in base_u.atoms.names])
     return base_u.atoms
 
-def build_graph(mda_structure, d_threshold=1.6):
+def build_graph(mda_structure, d_threshold=1.7):
     '''
     Creates a graph with nodes representing atoms with their element type and edges representing bonds from mda structure.
 
@@ -54,11 +54,6 @@ def build_graph(mda_structure, d_threshold=1.6):
                    zip(list(graph.nodes.keys()), mda_structure.atoms)}
     nx.set_node_attributes(graph, nodes_names)
     return graph
-
-
-#Geometrical parameters are calculated based only on atoms of purine or pyrimidine ring, all other atoms should be excluded from analysis
-atoms_to_exclude = {'A': [5], 'T': [2, 5, 8], 'G': [5, 8], 'C': [2, 5], 'U': []}
-
 
 def _check_atom_name(node1, node2):
     '''
@@ -117,11 +112,13 @@ for base in ['A', 'T', 'G', 'C', 'U']:
     mda_str = get_base_u(base)
     nucleotide_graphs[base] = build_graph(mda_str)
     base_graphs[base] = build_graph(mda_str[11:])
-
+# Geometrical parameters are calculated based only on atoms of purine or pyrimidine ring, all other atoms should be excluded from analysis
 atoms_to_exclude = {'A': [5], 'T': [2, 5, 8], 'G': [5, 8], 'C': [2, 5], 'U': []}
 
 
-def check_if_nucleotide(residue, base_graphs=base_graphs, candidates = ['G', 'T', 'A', 'C', 'U'], use_full_nucleotide=False):
+def check_if_nucleotide(residue, base_graphs=base_graphs,
+                        atoms_to_exclude=atoms_to_exclude, candidates = ['G', 'T', 'A', 'C', 'U'],
+                        use_full_nucleotide=False, nucleotide_graphs=nucleotide_graphs):
     # TODO: tune speed
     '''
     Finds if atoms of a given residue is nucleotide and gets it type. This function constructs graph of an experimental residue and determines if standard graph is subgraph of it. Then atoms that are not needed in further analysis are removed.
@@ -158,6 +155,7 @@ def check_if_nucleotide(residue, base_graphs=base_graphs, candidates = ['G', 'T'
         ismags_inst = nx.algorithms.isomorphism.ISMAGS(graph, base_graph, node_match=_check_atom_name)
 
         mapping = list(ismags_inst.find_isomorphisms(symmetry=True))
+
         if mapping != []:
             # надо проверять, что в меппинге хватает атомов, надо, чтобы не было лишних атомов
             mapping = dict(zip(mapping[0].values(), mapping[0].keys()))
@@ -175,75 +173,71 @@ def check_if_nucleotide(residue, base_graphs=base_graphs, candidates = ['G', 'T'
     return exp_sel, stand_sel, true_base
 
 
-
-
 class Nucleotide:
     '''
     Represents data of a single nucleotide. It exists as a reference to a nucleotide storage object which contains data of all nucleotides in a structures. All of its main variables are properties that get information from the storage class or set it there. These variables include:
-    
+
     **resid**, **segid** - nucleotide data from MDAnalysis.
-    
+
     **restype** - guessed priorly by check_if_nucleotide function.
-    
+
     **leading_strands** - bool, leading strands in strucutre are provided by user when analysis of a structure starts.
-    
+
     **origin**, **ref_frame** - torch.tensors of shapes (1,3) and (3,3). If these variables are used and storage contains None values, get_base_ref_frame function will be called to calculate them.
-    
+
     **s_residue**, **e_residue** - mda.atoms of standard and experimental residues. If these variables are used and storage contains None values, s_residue will be set from standrad pdb file and e_resiue will either be selected from mda Universe stored in this nucleotide coarse-grained structure class instance. If coarse-grained structure does not have mda Universe, e_residue will also be set from standard pdb file.
-    
+
     **next_nucleotide**, **previous_nucleotide** - Nucleotide class links to adjacent nucleotides. The order for both leading and lagging chain is considered to be 5' end to 3'.
     '''
-    def __init__(self,storage_class, ind):
-        
+    
+    def __init__(self, storage_class, ind):
+
         self.storage_class = storage_class
         self.ind = ind
 
-
     def __lt__(self, other):
-        #Sorted nucleotides start with those that are in leading strands, inside leading and lagging strands they are ordered by increase of resid.
+        # Sorted nucleotides start with those that are in leading strands, inside leading and lagging strands they are ordered by increase of resid.
         if self.leading_strand != other.leading_strand:
             return self.leading_strand > other.leading_strand
         else:
             return self.resid < other.resid
-        
-    def __eq__(self,other):
+
+    def __eq__(self, other):
         if type(other) != Nucleotide:
             return False
         return self.storage_class == other.storage_class and self.ind == other.ind
-    
-    
-    def _setter(self,attr,value):
+
+    def _setter(self,attr, value):
         getattr(self.storage_class,self.storage_class.get_name(attr))[self.ind] = value
-        
+
     def _getter(self,attr):
         return getattr(self.storage_class,self.storage_class.get_name(attr))[self.ind]
-        
+
     def _set_property(attr):
-        setter = lambda self,value: self._setter(value,attr=attr)
+        setter = lambda self,value: self._setter(value, attr=attr)
         getter = lambda self: self._getter(attr=attr)
-        return property(fset=setter,fget=getter)
-        
+        return property(fset=setter, fget=getter)
+
     restype = _set_property('restype')
     resid = _set_property('resid')
     segid = _set_property('segid')
     leading_strand = _set_property('leading_strand')
     res_atoms = _set_property('res_atoms')
 
-    
     @property
     def origin(self):
         value = self._getter('origin')
         if value is None:
-            R,o = get_base_ref_frame(self.s_residue,self.e_residue)
+            R,o = get_base_ref_frame(self.s_residue, self.e_residue)
             self._setter('ref_frame',R)
             self._setter('origin',o)
             value = o
         return value
-    
+
     @origin.setter
     def origin(self,value):
-        self._setter('origin',value)
-        
+        self._setter('origin', value)
+
     @property
     def ref_frame(self):
         value = self._getter('ref_frame')
@@ -253,13 +247,11 @@ class Nucleotide:
             self._setter('origin',o)
             value = R
         return value
-    
+
     @ref_frame.setter
     def ref_frame(self,value):
         self._setter('ref_frame',value)
-        
-    
-        
+
     @property
     def s_residue(self):
         value = self._getter('s_residue')
@@ -267,12 +259,11 @@ class Nucleotide:
             value = get_base_u(self.restype)
             self._setter('s_residue',value)
         return value
-    
+
     @s_residue.setter
-    def s_residue(self,value):
+    def s_residue(self, value):
         self._setter('s_residue',value)
-        
-        
+
     @property
     def e_residue(self):
         value = self._getter('e_residue')
@@ -281,19 +272,18 @@ class Nucleotide:
                 u = self.storage_class.mda_u.select_atoms(f'resid {self.resid} and segid {self.segid}')
             else:
                 u = get_base_u(self.restype)
-                
+
             exp_sel, stand_sel, _ = check_if_nucleotide(residue,candidates=[self.restype])
             self._setter('s_residue',sum(stand_sel))
             self._setter('e_residue',sum(exp_sel))
             value = exp_sel
-    
+
         return value
-    
+
     @e_residue.setter
     def e_residue(self,value):
         self._setter('e_residue',value)
-        
-        
+
     @property
     def next_nucleotide(self):
         ind = self.storage_class.e_residues.index(self.e_residue) + 1
@@ -312,9 +302,7 @@ class Nucleotide:
 
     def __repr__(self):
         return f'<Nucleotide with type {self.restype}, resid {self.resid} and segid {self.segid}>'
-    
 
-        
 def get_all_nucleotides(DNA_Structure,leading_strands,sel,use_full_nucleotide=False):
     '''
     Applies check_if_nucleotide function to each residue in selection from mda Universe stored in DNA_Structure. All atoms with altLocs are ignored.
@@ -333,7 +321,7 @@ def get_all_nucleotides(DNA_Structure,leading_strands,sel,use_full_nucleotide=Fa
     
     **nucleotides_data** - Nucleotides_Storage object that contains information about all found nucleotides.
     '''
-    nucleotides_data = Nucleotides_Storage(Nucleotide,DNA_Structure.u)
+    nucleotides_data = Nucleotides_Storage(Nucleotide, DNA_Structure.u)
     if sel:
         sel = DNA_Structure.u.select_atoms(sel)
     else:
@@ -346,11 +334,11 @@ def get_all_nucleotides(DNA_Structure,leading_strands,sel,use_full_nucleotide=Fa
             if base != '':
                 leading_strand = residue.segid in leading_strands
                 R,o = get_base_ref_frame(sum(stand_sel),sum(exp_sel))
-                nucleotides_data.append(base,residue_str, residue.resid, residue.segid, leading_strand,R,o.reshape(1,3),sum(stand_sel),sum(exp_sel),None)
-                
+                nucleotides_data.append(base, residue_str, residue.resid, residue.segid, leading_strand,R,o.reshape(1,3),sum(stand_sel),sum(exp_sel),None)
+
     if len(nucleotides_data) == 0:
         raise ValueError('No nucleotides found.')
-        
+
     nucleotides_data.sort('leading_strand','resid')
     nucleotides_data = nucleotides_data[nucleotides_data.leading_strands] + nucleotides_data[[not i for i in nucleotides_data.leading_strands]]
     return nucleotides_data

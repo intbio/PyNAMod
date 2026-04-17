@@ -23,9 +23,8 @@ class _Real_Space_Energy_Calculator():
         #self.epsilon_mean_prod = self.epsilon_mean_prod.to(device)
         self.charges_multipl_prod = self.charges_multipl_prod.to(device)
 
-    def set_energy_matrices(self,CG_structure,ignore_neighbors,ignore_rlsp_group_neighbors,set_dist_mat_sl):
+    def set_energy_matrices(self,CG_structure, ignore_neighbors, set_dist_mat_sl):
         self.ignore_neighbors = ignore_neighbors
-        self.ignore_rlsp_group_neighbors = ignore_rlsp_group_neighbors
         if set_dist_mat_sl:
             self._set_dist_mat_slice(CG_structure)
         radii = CG_structure.radii
@@ -53,44 +52,62 @@ class _Real_Space_Energy_Calculator():
         dist_matrix = self._cdist(rlsp_origins[:rlsp_change_index],rlsp_origins[rlsp_change_index:])
         electrostatic2,e_mat = self._get_electrostatic_e(dist_matrix,charges_multipl_prods)
         spatial2,s_mat = self._get_spatial_e(dist_matrix,radii_sum_prods)
-        
+
         old_s_mat = self._get_matr_slices(self.sp_en_mat,rlsp_change_index)
         old_e_mat = self._get_matr_slices(self.es_en_mat,rlsp_change_index)
         spatial1 = old_s_mat.sum()
         electrostatic1 = old_e_mat.sum()
         return electrostatic2-electrostatic1,spatial2-spatial1,e_mat,s_mat
-            
+
     def _set_dist_mat_slice(self, CG_structure):
         mat_shape = CG_structure.origins.shape[0]
-        dist_mat_slice = torch.ones(mat_shape,mat_shape,dtype=bool)
-        dist_mat_slice = torch.triu(dist_mat_slice)
-        vert_start = 0 
-        for group in CG_structure.rlsp_groups:
-            #This is incorrect, ignores by dna length, 2 accounts for protein size
-            # dist_mat_slice[vert_start:vert_start+protein.binded_dna_len*2,
-            #                vert_start:vert_start+protein.binded_dna_len*2] = False
-            ignore_dist = max(self.ignore_rlsp_group_neighbors,group.binded_dna_len//2)
-            ignore_until = group.ref_pair.ind + ignore_dist
-            if ignore_until > mat_shape:
-                ignore_until = mat_shape
-            ignore_from = group.ref_pair.ind - ignore_dist
-            if ignore_from < 0:
-                ignore_from = 0
-            hor_start = 0
-            for other_group in CG_structure.rlsp_groups:
-                if ignore_from <= other_group.ref_pair.ind < ignore_until:
+        dist_mat_slice = torch.zeros(mat_shape,mat_shape,dtype=bool)
 
-                    dist_mat_slice[vert_start:vert_start+group.n_cg_beads,
-                                    hor_start:hor_start+other_group.n_cg_beads] = False
-                    dist_mat_slice[hor_start:hor_start+other_group.n_cg_beads,
-                                   vert_start:vert_start+group.n_cg_beads] = False
+        vert_pos = 0
+        hor_start_pos = 0
+        for i,rlspg1 in enumerate(CG_structure.rlsp_groups):
+            hor_start_pos += rlspg1.n_cg_beads
+            hor_pos = hor_start_pos
+            for j,rlspg2 in enumerate(CG_structure.rlsp_groups[i+1:]):
+                binded_dna = max(rlspg1.binded_dna_len,rlspg2.binded_dna_len)//2
+                cutoff = max(binded_dna,self.ignore_neighbors)
+                if j + 1 > cutoff:
+                    dist_mat_slice[vert_pos:vert_pos+rlspg1.n_cg_beads,
+                                    hor_pos:hor_pos+rlspg2.n_cg_beads] = 1
 
-                hor_start+=other_group.n_cg_beads
-                
-            vert_start += group.n_cg_beads
-        
+                hor_pos += rlspg2.n_cg_beads
+
+            vert_pos += rlspg1.n_cg_beads
+
+        # dist_mat_slice = torch.ones(mat_shape,mat_shape,dtype=bool)
+        # dist_mat_slice = torch.triu(dist_mat_slice)
+        # vert_start = 0
+        # for group in CG_structure.rlsp_groups:
+        #     #This is incorrect, ignores by dna length, 2 accounts for protein size
+        #     # dist_mat_slice[vert_start:vert_start+protein.binded_dna_len*2,
+        #     #                vert_start:vert_start+protein.binded_dna_len*2] = False
+        #     ignore_dist = max(self.ignore_neighbors,group.binded_dna_len//2)
+        #     ignore_until = group.ref_pair.ind + ignore_dist
+        #     if ignore_until > mat_shape:
+        #         ignore_until = mat_shape
+        #     ignore_from = group.ref_pair.ind - ignore_dist
+        #     if ignore_from < 0:
+        #         ignore_from = 0
+        #     hor_start = 0
+        #     for other_group in CG_structure.rlsp_groups:
+        #         if ignore_from <= other_group.ref_pair.ind < ignore_until:
+
+        #             dist_mat_slice[vert_start:vert_start+group.n_cg_beads,
+        #                             hor_start:hor_start+other_group.n_cg_beads] = False
+        #             dist_mat_slice[hor_start:hor_start+other_group.n_cg_beads,
+        #                            vert_start:vert_start+group.n_cg_beads] = False
+
+        #         hor_start+=other_group.n_cg_beads
+
+        #     vert_start += group.n_cg_beads
+
         self.dist_mat_slice = dist_mat_slice
-        
+
     def _get_matr_slices(self,mat,rlsp_ind):
 
         return mat[:rlsp_ind,rlsp_ind:]
@@ -99,8 +116,7 @@ class _Real_Space_Energy_Calculator():
         inv = ~self.dist_mat_slice
         self.radii_sum_prod[inv] = 0
         self.charges_multipl_prod[inv] = 0
-        
-    
+
     def _get_real_space_total_energy(self,origins,rlsp_origins,save_matr=True):
 
         total_es = torch.tensor(0,device=origins.device,dtype=origins.dtype)
@@ -119,7 +135,7 @@ class _Real_Space_Energy_Calculator():
             self.es_en_mat[self.dist_mat_slice] = e_mat
             self.sp_en_mat = torch.zeros(rlsp_origins.shape[0],rlsp_origins.shape[0],device=s_mat.device,dtype=s_mat.dtype)
             self.sp_en_mat[self.dist_mat_slice] = s_mat
-                   
+
         return total_es,total_sp
 
     def _get_real_space_softmax_energy(self,origins,*args,**kwards):
@@ -128,7 +144,7 @@ class _Real_Space_Energy_Calculator():
         radii_sum_prod = self.radii_sum_prod[self.dist_mat_slice]**2
         energy = self.K_free*(((radii_sum_prod/(dist_matrix**2+0.0001*radii_sum_prod))**6).sum())
         return torch.tensor(0,device = self.radii_sum_prod.device),energy
-    
+
     def _get_electrostatic_e(self,dist_matrix,charges_multipl_prod):
         div = charges_multipl_prod/dist_matrix
         exp = (self.k_deb*dist_matrix).exp()
@@ -149,5 +165,5 @@ class _Real_Space_Energy_Calculator():
         o1 = o1.unsqueeze(1).expand(n, m, 3)
         o2 = o2.unsqueeze(0).expand(n, m, 3)
         dist_mat = torch.pow(o2 - o1, 2).sum(2)
-        
+
         return dist_mat.sqrt()

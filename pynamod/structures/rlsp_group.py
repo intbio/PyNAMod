@@ -29,7 +29,6 @@ class Real_Space_Beads_Groups:
         group.create_dataset('ref_vectors', data=self.ref_vectors, **dataset_kwards)
         group.create_dataset('charges', data=self.charges, **dataset_kwards)
         group.create_dataset('radii', data=self.radii, **dataset_kwards)
-        group.create_dataset('masses', data=self.masses, **dataset_kwards)
         group.create_dataset('eps', data=self.eps, **dataset_kwards)
         group.create_dataset('supdata', data=[self.n_cg_beads, self.ref_pair.ind, self.binded_dna_len], **dataset_kwards)
 
@@ -43,7 +42,6 @@ class Real_Space_Beads_Groups:
 
         self.charges = torch.from_numpy(file[group_name]['charges'][:])
         self.radii = torch.from_numpy(file[group_name]['radii'][:])
-        self.masses = torch.from_numpy(file[group_name]['masses'][:])
         self.eps = torch.from_numpy(file[group_name]['eps'][:])
         self.n_cg_beads = int(file[group_name]['supdata'][0])
         self.binded_dna_len = int(file[group_name]['supdata'][2])
@@ -57,9 +55,9 @@ class Real_Space_Beads_Groups:
         return torch.matmul(self.ref_vectors.reshape(-1,1,3), ref_Rm.T) + ref_om
 
     def copy(self):
-        return Protein(mdaUniverse=self.u, n_cg_beads=self.n_cg_beads, ref_pair=self.ref_pair,
+        return Real_Space_Beads_Groups(n_cg_beads=self.n_cg_beads, ref_pair=self.ref_pair,
                        eps=self.eps.clone(), ref_vectors=self.ref_vectors.clone(),
-                       radii=self.radii.clone(), charges=self.charges.clone(), masses=self.masses.clone(),
+                       radii=self.radii.clone(), charges=self.charges.clone(),
                        cg_structure=self.cg_structure,  binded_dna_len=self.binded_dna_len)
 
     def to(self, device):
@@ -157,6 +155,12 @@ class Protein(Real_Space_Beads_Groups):
 
         self.charges = torch.from_numpy(self.charges)
         self.masses = torch.from_numpy(self.masses)
+
+    def copy(self):
+        return Protein(mdaUniverse=self.u, n_cg_beads=self.n_cg_beads, ref_pair=self.ref_pair,
+                       eps=self.eps.clone(), ref_vectors=self.ref_vectors.clone(),
+                       radii=self.radii.clone(), charges=self.charges.clone(), masses=self.masses.clone(),
+                       cg_structure=self.cg_structure,  binded_dna_len=self.binded_dna_len)
 
     def __repr__(self):
         return f'<Protein with {self.n_cg_beads} CG beads and linked to {self.ref_pair.ind}th pair>' 

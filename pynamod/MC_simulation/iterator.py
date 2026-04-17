@@ -96,10 +96,10 @@ class Iterator:
         e_dif_components, e_mat, s_mat = self.energy.get_energy_dif(self._rotation_handler, change_indices[1], self.prev_e)
 
         e_dif_components = torch.stack(e_dif_components)
-        cur_e = torch.stack(self.energy.get_energy_components(self._rotation_handler,save_matr=False))
-        d = ((cur_e - self.prev_e)[1:3] - e_dif_components[1:3])
-        if abs(d[0]) > 10**-4 or abs(d[1]) > 10**-4:
-            print(d)
+        # cur_e = torch.stack(self.energy.get_energy_components(self._rotation_handler, save_matr=False))
+        # d = ((cur_e - self.prev_e)[1:3] - e_dif_components[1:3])
+        # if abs(d[0]) > 10**-4 or abs(d[1]) > 10**-4:
+        #     print(d)
 
         Del_E = e_dif_components.sum()
 
