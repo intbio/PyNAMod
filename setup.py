@@ -5,6 +5,7 @@ setuptools.setup(
      python_requires=">=3.11",
      packages=setuptools.find_packages(exclude=['examples']),
      data_files=['pynamod/atomic_analysis/classifier.pkl','pynamod/tests/cg_3lz0.h5'],
+     package_data= {'pynamod':['structures/ref_3spn/*']},
      include_package_data=True,
      classifiers=[
         "Programming Language :: Python :: 3",
