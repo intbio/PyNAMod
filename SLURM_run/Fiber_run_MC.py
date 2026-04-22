@@ -9,13 +9,10 @@ import numpy as np
 import time
 from pynamod.geometry.trajectories import H5_Trajectory
 
-file = h5py.File('NCP_with_tails.h5','r')
 results = {}
 for i in range(5,31,5):
 
-    nucl = pynamod.CG_Structure()
-    
-    nucl.load_from_h5(file)
+    nucl = symmetrical_nucleosome
 
     dna_gen = pynamod.CG_Structure()
     dna_gen.build_dna(sequence='atcg'*7)

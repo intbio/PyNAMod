@@ -15,3 +15,7 @@ from pynamod.structures import *
 from pynamod.energy.energy import Energy
 from pynamod.MC_simulation.iterator import Iterator
 import pynamod.geometry
+from importlib.resources import files
+
+import h5py
+symmetrical_nucleosome = CG_Structure().load_from_h5(h5py.File(files('pynamod').joinpath(f'structures/nucleosome_sym.h5')))

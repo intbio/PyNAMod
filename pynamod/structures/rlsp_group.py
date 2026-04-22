@@ -159,7 +159,7 @@ class Protein(Real_Space_Beads_Groups):
     def copy(self):
         return Protein(mdaUniverse=self.u, n_cg_beads=self.n_cg_beads, ref_pair=self.ref_pair,
                        eps=self.eps.clone(), ref_vectors=self.ref_vectors.clone(),
-                       radii=self.radii.clone(), charges=self.charges.clone(), masses=self.masses.clone(),
+                       radii=self.radii.clone(), charges=self.charges.clone(),
                        cg_structure=self.cg_structure,  binded_dna_len=self.binded_dna_len)
 
     def __repr__(self):

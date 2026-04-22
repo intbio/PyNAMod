@@ -10,7 +10,7 @@ from MDAnalysis.coordinates.memory import MemoryReader
 from MDAnalysis.analysis import align
 import matplotlib.pyplot as plt
 from pynamod.structures.DNA_structure import DNA_Structure
-from pynamod.structures.rlsp_group import Protein
+from pynamod.structures.rlsp_group import Protein, Real_Space_Beads_Groups
 from pynamod.atomic_analysis.nucleotides_parser import check_if_nucleotide
 from pynamod.structures.nucleotides_models import Nucleotide_Creator
 
@@ -41,7 +41,8 @@ class CG_Structure:
         else:
             self.u = None
         if self.u:
-            self.u.add_TopologyAttr('elements', [guess_atom_element(name) for name in self.u.atoms.names])
+            if not hasattr(self.u.atoms,'types'):
+                self.u.add_TopologyAttr('elements', [guess_atom_element(name) for name in self.u.atoms.names])
 
         self.nucleotides_model = nucleotides_model
 
@@ -110,11 +111,19 @@ class CG_Structure:
         i = 0
         while True:
             try:
-                protein = Protein()
-                ref_ind = protein.load_from_h5(file, group_name=f'protein_{i}_CG_parameters')
-                protein.ref_pair = self.dna.pairs_list[ref_ind]
-                protein.cg_structure = self
-                self.rlsp_groups.append(protein)
+                if file[f'protein_{i}_CG_parameters']['n_cg_beads'] > 6:
+                    protein = Protein()
+                    ref_ind = protein.load_from_h5(file, group_name=f'protein_{i}_CG_parameters')
+                    protein.ref_pair = self.dna.pairs_list[ref_ind]
+                    protein.cg_structure = self
+                    self.rlsp_groups.append(protein)
+                    self.proteins.append(protein)
+                else:
+                    rlsp = Real_Space_Beads_Groups()
+                    rlsp = rlsp.load_from_h5(file, group_name=f'protein_{i}_CG_parameters')
+                    rlsp.ref_pair = self.dna.pairs_list[ref_ind]
+                    rlsp.cg_structure = self
+                    self.rlsp_groups.append(rlsp)
                 i += 1
             except KeyError:
                 break

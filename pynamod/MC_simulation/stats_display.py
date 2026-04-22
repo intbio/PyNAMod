@@ -8,7 +8,6 @@ class _Stats_Display:
         self._total_step_bar = tqdm(total=max_steps,desc='Steps',disable=mute)
         self._info_pbar = tqdm(total=100,bar_format='{l_bar}{bar}{postfix}',desc='Acceptance rate',disable=mute)
         print("Start time:",time.strftime('%D %H:%M:%S',self._prev_time))
-  
 
     def show_step_data(self,accepted_steps,total_steps,prev_e):
         self.acceptance_rate = 100*accepted_steps/total_steps
@@ -23,7 +22,7 @@ class _Stats_Display:
             self._info_pbar.set_description(f'Acceptance rate %')
 
             self._info_pbar.update(self.acceptance_rate-self._info_pbar.n)
-            
+
     def show_final_data(self,target_accepted_steps,stopped,accepted_steps,total_steps):
         if accepted_steps >= target_accepted_steps:
             print('target accepted steps reached')

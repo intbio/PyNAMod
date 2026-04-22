@@ -62,7 +62,6 @@ class DNA_Structure:
         rev_sequence = Seq(sequence).reverse_complement()
         ln = len(sequence)
 
-        
         self.nucleotides = Nucleotides_Storage(Nucleotide,None)
         self.nucleotides.restypes = list(sequence+rev_sequence[::-1])
         self.nucleotides.resids = list(range(ln))*2

@@ -21,15 +21,16 @@ class Nucleotide_Creator:
         elif model_type == '3spn_generated':
             self.create = self.create_3spn_generated
             self.ref_rlsps = {}
-            for name in ['AT','TA','CG','GC']:
+            for name in ['AT', 'TA', 'CG', 'GC']:
                 rlspg = Real_Space_Beads_Groups(6)
                 path = files('pynamod').joinpath(f'structures/ref_3spn/{name}.h5')
-                rlspg.load_from_h5(h5py.File(path,'r'))
+                rlspg.load_from_h5(h5py.File(path, 'r'))
                 self.ref_rlsps[name] = rlspg
-                
 
         elif model_type == '1spbp':
             self.create = self.create_1spbp
+        else:
+            raise AttributeError('Unknown nucleotide model')
 
     def create_1spn(self, pair, ref_ori, ref_r):
         lead_nucl_u = pair.lead_nucl.res_atoms
