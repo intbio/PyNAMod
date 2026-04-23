@@ -7,7 +7,7 @@ from sklearn.neighbors import KNeighborsClassifier
 
 
 class Real_Space_Beads_Groups:
-    def __init__(self, n_cg_beads, ref_vectors=None, charges=None, masses=None,
+    def __init__(self, n_cg_beads=None, ref_vectors=None, charges=None, masses=None,
                  radii=None, ref_pair=None, eps=1,
                  binded_dna_len=None, cg_structure=None):
         self.n_cg_beads = n_cg_beads
@@ -48,11 +48,15 @@ class Real_Space_Beads_Groups:
         return int(file[group_name]['supdata'][1])
 
     def get_true_pos(self, dna_structure=None, ref_om=None, ref_Rm=None):
+        if dna_structure is None:
+            dna_structure = self.cg_structure.dna
+
         if ref_om is None:
             ref_om = torch.tensor(dna_structure.origins[self.ref_pair.ind]).to(self.ref_vectors.dtype)
+        if ref_Rm is None:
             ref_Rm = torch.tensor(dna_structure.ref_frames[self.ref_pair.ind]).to(self.ref_vectors.dtype)
 
-        return torch.matmul(self.ref_vectors.reshape(-1,1,3), ref_Rm.T) + ref_om
+        return torch.matmul(self.ref_vectors.reshape(-1,1,3).to(ref_om.dtype), ref_Rm.T) + ref_om
 
     def copy(self):
         return Real_Space_Beads_Groups(n_cg_beads=self.n_cg_beads, ref_pair=self.ref_pair,
@@ -68,13 +72,13 @@ class Real_Space_Beads_Groups:
 
     @property
     def origins(self):
-        return self.get_true_pos(self.cg_structure.dna)
+        return self.get_true_pos()
 
 
 class Protein(Real_Space_Beads_Groups):
     '''This class contains protein model as coarse grained beads with radii and charges. This class is always related to CG structure that stores positions of CG beads in All_Coords object. Init function of this class requires pdb2pqr class if initialized from mda Universe without charges.'''
 
-    def __init__(self, mdaUniverse=None, n_cg_beads=50, ref_vectors=None,
+    def __init__(self,n_cg_beads=50, mdaUniverse=None,  ref_vectors=None,
                  charges=None, masses=None, radii=None, ref_pair=None,
                  eps=1, binded_dna_len=None, cg_structure=None):
 

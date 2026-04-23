@@ -5,7 +5,8 @@ from scipy.spatial.transform import Rotation as R
 class Geometry_Functions:
     '''This class contains functions to rebuild reference frames and ori from local DNA parameters for full strucuture or partially with rotation and to rebuild local parameters from reference frames amd origins. This class is supposed to be used as a super class for Geometrical_Parameters.'''
 
-    def rebuild_ref_frames_and_ori(self,start_index = 0, stop_index = None, start_ref_frame = None,start_origin = None):
+    def rebuild_ref_frames_and_ori(self, start_index=0, stop_index=None,
+                                   start_ref_frame=None, start_origin=None):
         if stop_index is None:
             stop_index = self.len
 

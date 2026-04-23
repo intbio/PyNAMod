@@ -167,7 +167,8 @@ class Structures_Storage:
         group = file.create_group(group_name)
         for attr in self.structure_attrs_list:
             attr = self.get_name(attr)
-            if not isinstance(getattr(self,attr)[0],(Geometrical_Parameters,AtomGroup)):
+            item = getattr(self,attr)[0]
+            if item is not None and not isinstance(item,(Geometrical_Parameters,AtomGroup)):
                 group.create_dataset(attr,data=getattr(self,attr),**dataset_kwards)
 
             elif isinstance(getattr(self,attr)[0],Geometrical_Parameters):
@@ -220,18 +221,18 @@ class Nucleotides_Storage(Structures_Storage):
         structure_attrs_list = ['restype','res_atoms', 'resid', 'segid','leading_strand','ref_frame','origin','s_residue', 'e_residue']
         if not stored_params:
             stored_params = [[],[],[],[],[],torch.empty(0,3,3,dtype=torch.double),torch.empty(0,1,3,dtype=torch.double),[],[]]
-            
+
         super().__init__(nucleotide_class,structure_attrs_list,*stored_params)
-        
+
     def copy(self):
         new = super().copy()
         new.mda_u = self.mda_u
         return new
-    
+
     def __repr__(self):
         return f'<Storage with {len(self)} nucleotides>'
-    
-    
+
+
 class Pairs_Storage(Structures_Storage):
     '''
     Subclass that sets attributes to store pairs data.
@@ -242,28 +243,28 @@ class Pairs_Storage(Structures_Storage):
         structure_attrs_list = ['lead_nucl_ind', 'lag_nucl_ind', 'radius','charge','epsilon','geom_params']
         if not stored_params:
             stored_params = [[],[],[],[],[],[],[]]
-            
+
         super().__init__(pair_class,structure_attrs_list,*stored_params)
-        
+
     def _ls(self,item,attrs):
         nucl = self.nucleotides_storage[getattr(self,self.get_name(attrs[0]))[item]]
         return (nucl.leading_strand,nucl.resid)
-    
+
     def sort(self):
         new_seq = self._argsort(['lead_nucl_ind'])
-        
+
         for name in self.structure_attrs_list:
             sorted_data = [getattr(self,self.get_name(name))[i] for i in new_seq]
             if isinstance(sorted_data[0],torch.Tensor):
                 sorted_data = torch.stack(sorted_data)
             setattr(self,self.get_name(name),sorted_data)
-            
+
         leading_strands = self.nucleotides_storage[getattr(self,self.get_name('lead_nucl_ind'))].leading_strands
         if sum(leading_strands) == len(leading_strands):
             return self[leading_strands]
         else:
             return self[leading_strands] + self[[not i for i in leading_strands]]
-        
+
     def __getitem__(self,sl):
         item = super().__getitem__(sl)
         if isinstance(item,Pairs_Storage):
@@ -276,21 +277,20 @@ class Pairs_Storage(Structures_Storage):
 
         else:
             return item
-        
+
     def __repr__(self):
-        return f'<Storage with {len(self)} pairs>'            
-            
+        return f'<Storage with {len(self)} pairs>'
+
     def copy(self):
         new = super().copy()
         new.nucleotides_storage = self.nucleotides_storage
         return new
-    
+
     def load_from_h5(self,file,group_name):
         super().load_from_h5(file,group_name)
-        
-        pair_params = torch.tensor(file[group_name]['pair_params'])
-        ref_frames = torch.tensor(file[group_name]['pair_ref_frames'])
-        origins = torch.tensor(file[group_name]['pair_origins'])
-        params_sets = [[torch.vstack([torch.zeros(1,*p.shape),p.reshape(1,*p.shape)]) for p in (pars,oris,rfs)] for (pars,rfs,oris) in zip(pair_params,ref_frames,origins)]
-        self.geom_paramss = [Geometrical_Parameters(local_params=pars,origins=oris,ref_frames=rfs) for (pars,oris,rfs) in params_sets]
-        
+        if 'pair_params' in file[group_name].keys():
+            pair_params = torch.tensor(file[group_name]['pair_params'])
+            ref_frames = torch.tensor(file[group_name]['pair_ref_frames'])
+            origins = torch.tensor(file[group_name]['pair_origins'])
+            params_sets = [[torch.vstack([torch.zeros(1,*p.shape),p.reshape(1,*p.shape)]) for p in (pars,oris,rfs)] for (pars,rfs,oris) in zip(pair_params,ref_frames,origins)]
+            self.geom_params = [Geometrical_Parameters(local_params=pars,origins=oris,ref_frames=rfs) for (pars,oris,rfs) in params_sets]

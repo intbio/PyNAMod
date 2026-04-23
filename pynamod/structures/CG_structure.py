@@ -108,25 +108,21 @@ class CG_Structure:
 
     def load_from_h5(self, file):
         self.dna.load_from_h5(file)
-        i = 0
-        while True:
-            try:
-                if file[f'protein_{i}_CG_parameters']['n_cg_beads'] > 6:
-                    protein = Protein()
-                    ref_ind = protein.load_from_h5(file, group_name=f'protein_{i}_CG_parameters')
-                    protein.ref_pair = self.dna.pairs_list[ref_ind]
-                    protein.cg_structure = self
-                    self.rlsp_groups.append(protein)
-                    self.proteins.append(protein)
-                else:
-                    rlsp = Real_Space_Beads_Groups()
-                    rlsp = rlsp.load_from_h5(file, group_name=f'protein_{i}_CG_parameters')
-                    rlsp.ref_pair = self.dna.pairs_list[ref_ind]
-                    rlsp.cg_structure = self
-                    self.rlsp_groups.append(rlsp)
-                i += 1
-            except KeyError:
-                break
+        for i in range(len(file)-1):
+
+            if file[f'protein_{i}_CG_parameters']['supdata'][0] > 6:
+                protein = Protein(file[f'protein_{i}_CG_parameters']['supdata'][0])
+                ref_ind = protein.load_from_h5(file, group_name=f'protein_{i}_CG_parameters')
+                protein.ref_pair = self.dna.pairs_list[ref_ind]
+                protein.cg_structure = self
+                self.rlsp_groups.append(protein)
+                self.proteins.append(protein)
+            else:
+                rlsp = Real_Space_Beads_Groups(file[f'protein_{i}_CG_parameters']['supdata'][0])
+                ref_ind = rlsp.load_from_h5(file, group_name=f'protein_{i}_CG_parameters')
+                rlsp.ref_pair = self.dna.pairs_list[ref_ind]
+                rlsp.cg_structure = self
+                self.rlsp_groups.append(rlsp)
 
         return self
 
@@ -151,7 +147,7 @@ class CG_Structure:
         if binded_dna_len is None:
             binded_dna_len = len(self.dna.pairs_list)
 
-        new = Protein(protein_u, n_cg_beads=n_cg_beads,
+        new = Protein(mdaUniverse = protein_u, n_cg_beads=n_cg_beads,
                       ref_pair=self.dna.pairs_list[ref_index], binded_dna_len=binded_dna_len)
         new.cg_structure = self
         new.build_model(self.dna)
@@ -238,13 +234,13 @@ class CG_Structure:
         '''
         structures = [structure.copy() for structure in structures]
         self.proteins += [protein for structure in structures for protein in structure.proteins]
-        self.rlsp_groups = [group for structure in structures for group in structure.rlsp_groups]
+        self.rlsp_groups += [group for structure in structures for group in structure.rlsp_groups]
         update_value = len(self.dna.pairs_list)
-        self.dna.append_structures([structure.dna for structure in structures],copy=False)
+        self.dna.append_structures([structure.dna for structure in structures], copy=False)
         for structure in structures:
-            for protein in structure.rlsp_groups:
-                protein.cg_structure = self
-                protein.ref_pair = self.dna.pairs_list[protein.ref_pair.ind+update_value]
+            for group in structure.rlsp_groups:
+                group.cg_structure = self
+                group.ref_pair = self.dna.pairs_list[group.ref_pair.ind+update_value]
             update_value += len(structure.dna.pairs_list)
 
         return self
@@ -255,10 +251,14 @@ class CG_Structure:
         new = CG_Structure(mdaUniverse=self.u)
         new.dna = self.dna.copy()
         new.rlsp_groups = []
-        for protein in self.rlsp_groups:
-            new.rlsp_groups.append(protein.copy())
+        for rlsp in self.rlsp_groups:
+            rlsp = rlsp.copy()
+            new.rlsp_groups.append(rlsp)
             ind = new.rlsp_groups[-1].ref_pair.ind
             new.rlsp_groups[-1].ref_pair = new.dna.pairs_list[ind]
+            rlsp.cg_structure = new
+            if rlsp.n_cg_beads > 6:
+                new.proteins.append(rlsp)
         return new
 
     def to(self, device):

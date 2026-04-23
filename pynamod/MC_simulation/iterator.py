@@ -13,14 +13,15 @@ class Iterator:
 
         self.res_trajectory = cg_structure.dna.geom_params.trajectory
 
-    def run(self, target_accepted_steps=int(1e5), max_steps=int(1e6), transfer_to_memory_every=None, save_every=1,
-            mute=False, KT_factor=1, integration_mod='minimize', device='cpu', traj_init_step=None):
+    def run(self, target_accepted_steps=int(1e5), max_steps=int(1e6), transfer_to_memory_every=None, save_every=1, rebuild_every=500,
+            mute=False, KT_factor=1, integration_mod='minimize', device='cpu', traj_init_step=None, dtype=torch.float):
 
-        self._prepare_system(target_accepted_steps,transfer_to_memory_every,device,integration_mod,traj_init_step,KT_factor)
+        self._prepare_system(target_accepted_steps, transfer_to_memory_every, rebuild_every,
+                             device, integration_mod, traj_init_step, KT_factor, dtype)
 
         self._stop_loop = False
         signal.signal(signal.SIGINT, self._signal_handler)
-
+        self.dif_cutoff = 10 ** -8
         self._stats_display = _Stats_Display(max_steps,mute)
 
         while self.total_step < max_steps and self.accepted_steps < target_accepted_steps:
@@ -40,7 +41,12 @@ class Iterator:
         self.energy.to(device)
         self._rotation_handler.to(device)
 
-    def _prepare_system(self, target_accepted_steps, transfer_to_memory_every, device, integration_mod, traj_init_step, KT_factor):
+    def _prepare_system(self, target_accepted_steps, transfer_to_memory_every, rebuild_every,
+                        device, integration_mod, traj_init_step, KT_factor, dtype):
+        if rebuild_every is None:
+            rebuild_every = target_accepted_steps
+        self.rebuild_every = rebuild_every
+        
         if not transfer_to_memory_every:
             transfer_to_memory_every = target_accepted_steps
         self.transfer_to_memory_every = transfer_to_memory_every
@@ -49,7 +55,7 @@ class Iterator:
             traj_init_step = len(self.res_trajectory) - 1
         cur_step = self.res_trajectory.cur_step
         self.res_trajectory.cur_step = traj_init_step
-        self._create_tens_trajectory()
+        self._create_tens_trajectory(dtype)
         self.to(device)
 
         if 'energies' not in self.res_trajectory.attrs_names:
@@ -73,11 +79,11 @@ class Iterator:
         elif integration_mod == 'random_step':
             self.movable_ind_len = self.movable_ind.shape[0]
 
-    def _create_tens_trajectory(self):
-        init_local_params = self.cg_structure.dna.geom_params.local_params.to(torch.double)
-        init_ref_frames = self.cg_structure.dna.geom_params.ref_frames.to(torch.double)
-        init_ori = self.cg_structure.dna.geom_params.origins.to(torch.double)
-        init_rlsp_ori = self.cg_structure.origins
+    def _create_tens_trajectory(self, dtype):
+        init_local_params = self.cg_structure.dna.geom_params.local_params.to(dtype)
+        init_ref_frames = self.cg_structure.dna.geom_params.ref_frames.to(dtype)
+        init_ori = self.cg_structure.dna.geom_params.origins.to(dtype)
+        init_rlsp_ori = self.cg_structure.origins.to(dtype)
 
         ln = init_ref_frames.shape[0]
         traj_len = self.transfer_to_memory_every + 1
@@ -94,15 +100,17 @@ class Iterator:
         self._rotation_handler.apply_rotation(change_indices, self.trajectory)
 
         e_dif_components, e_mat, s_mat = self.energy.get_energy_dif(self._rotation_handler, change_indices[1], self.prev_e)
-
         e_dif_components = torch.stack(e_dif_components)
-        # cur_e = torch.stack(self.energy.get_energy_components(self._rotation_handler, save_matr=False))
-        # d = ((cur_e - self.prev_e)[1:3] - e_dif_components[1:3])
-        # if abs(d[0]) > 10**-4 or abs(d[1]) > 10**-4:
-        #     print(d)
+        cur_e = torch.stack(self.energy.get_energy_components(self._rotation_handler, save_matr=False))
+        d = ((cur_e - self.prev_e)[1:3] - e_dif_components[1:3])
+        if abs(d[0]) > 10**-4 or abs(d[1]) > 10**-4:
+            print(d)
+        dif = self._rotation_handler.compare()
+        if dif[0] > self.dif_cutoff or dif[1] > self.dif_cutoff:
+            print(dif,self.total_step)
+            self.dif_cutoff *= 10
 
         Del_E = e_dif_components.sum()
-
         r = torch.rand(1).item()
         self.total_step += 1
 
@@ -110,6 +118,21 @@ class Iterator:
             self.energy.update_matrices(e_mat, s_mat, change_indices[1])
             self.prev_e += e_dif_components
             self.accepted_steps += 1
+
+            if self.accepted_steps % self.rebuild_every == 0:
+                self._rotation_handler.len = self._rotation_handler.origins.shape[0]
+                self._rotation_handler.rebuild_ref_frames_and_ori(
+                    start_ref_frame=self._rotation_handler.ref_frames[0],
+                    start_origin=self._rotation_handler.origins[0])
+
+                rlsp_origins = []
+                for rlsp_group in self.cg_structure.rlsp_groups:
+                    ref_ind = rlsp_group.ref_pair.ind
+                    ref_r = self._rotation_handler.ref_frames[ref_ind]
+                    ref_ori = self._rotation_handler.origins[ref_ind]
+                    rlsp_origins.append(rlsp_group.get_true_pos(ref_om=ref_ori, ref_Rm=ref_r))
+
+                self.rlsp_origins = torch.vstack(rlsp_origins)
 
             self._rotation_handler.set_new_traj_params(self.trajectory)
 

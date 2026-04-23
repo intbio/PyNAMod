@@ -219,9 +219,9 @@ class DNA_Structure:
         new.geom_params = self.geom_params.copy()
         new.pairs_list = self.pairs_list.copy()
         new.nucleotides = self.nucleotides.copy()
-        
+
         return new
-    
+
     def parse_pairs(self,pairs_in_structure):
         '''Is called in analyze_dna method if list of pairs is provided. Creates a pair list based on given information.'''
         self.pairs_list = Pairs_Storage(Base_Pair,self.nucleotides)
@@ -244,13 +244,13 @@ class DNA_Structure:
         group.create_dataset('origins',data=self.origins,**dataset_kwards)
         group.create_dataset('ref_frames',data=self.ref_frames,**dataset_kwards)
         group.create_dataset('movable_steps',data=self.movable_steps,dtype=bool)
-        
+
     def load_from_h5(self,file):
         data = file['DNA_data']
-        
+
         self.nucleotides = Nucleotides_Storage(Nucleotide,self.u)
         self.pairs_list = Pairs_Storage(Base_Pair,self.nucleotides)
-        
+
         self.pairs_list.load_from_h5(data,'pairs')
         self.nucleotides.load_from_h5(data,'nucleotides')
         self.geom_params = Geometrical_Parameters(local_params=torch.tensor(data['step_params']),
@@ -259,7 +259,7 @@ class DNA_Structure:
                                                  )
         self.movable_steps = torch.tensor(data['movable_steps'])
         self._set_pair_params_list()
-            
+
     def _set_pair_params_list(self):
         '''Fetches parameters from individual Pair objects'''
         self.radii = torch.tensor(self.pairs_list.radii)
@@ -271,46 +271,40 @@ class DNA_Structure:
 
     def _setter(self,value,attr):
         setattr(self.geom_params,attr,value)
-        
+
     def _set_property(attr):
         return property(lambda self: self._getter(attr=attr),lambda self,value: self._setter(value,attr=attr))
-        
-    
+
     @property
     def trajectory(self):
         return self.geom_params.trajectory
-    
-    
+
     step_params = _set_property('local_params')
     ref_frames = _set_property('ref_frames')
 
     @property
     def origins(self):
         return self.geom_params.origins
-    
+
     @origins.setter
     def origins(self,value):
         self.geom_params.origins = value
-    
+
     def __repr__(self):
         return f'<DNA structure with {len(self.pairs_list)} nucleotide pairs>'
-    
-    
+
     def __getitem__(self,sl):
         ''''''
         attrs = self.__dict__.copy()
         for attr in ('pairs_list', 'geom_params'):
             attrs[attr] = getattr(self,attr)[sl]
-        
-        for attr in ( 'radii', 'eps', 'charges'):
+
+        for attr in ('radii', 'eps', 'charges'):
             if sl.step < 0:
                 it = getattr(self,attr).flip(dims=(0,))
                 new_sl = slice(sl.start,sl.stop,-1*sl.step)
                 attrs[attr] = it[new_sl]
             else:
                 attrs[attr] = getattr(self,attr)[sl]
-    
+
         return DNA_Structure(**attrs)
-        
-    
-        
