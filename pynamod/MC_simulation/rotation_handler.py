@@ -34,7 +34,7 @@ class _Rotation_Handler(Geometry_Functions):
         new.len = new.ref_frames.shape[0]
         new.rebuild_ref_frames_and_ori(start_ref_frame=self.ref_frames[0],
                                        start_origin=self.origins[0])
-        return ((new.origins-self.origins).abs().mean(),(new.ref_frames-self.ref_frames).abs().mean())
+        return ((new.origins-self.origins).abs().max(),(new.ref_frames-self.ref_frames).abs().max())
 
     def set_new_traj_params(self, trajectory):
 

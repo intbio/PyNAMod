@@ -13,7 +13,7 @@ class Iterator:
 
         self.res_trajectory = cg_structure.dna.geom_params.trajectory
 
-    def run(self, target_accepted_steps=int(1e5), max_steps=int(1e6), transfer_to_memory_every=None, save_every=1, rebuild_every=500,
+    def run(self, target_accepted_steps=int(1e5), max_steps=int(1e6), transfer_to_memory_every=None, save_every=1, rebuild_every=400,
             mute=False, KT_factor=1, integration_mod='minimize', device='cpu', traj_init_step=None, dtype=torch.float):
 
         self._prepare_system(target_accepted_steps, transfer_to_memory_every, rebuild_every,
@@ -21,7 +21,7 @@ class Iterator:
 
         self._stop_loop = False
         signal.signal(signal.SIGINT, self._signal_handler)
-        self.dif_cutoff = 10 ** -8
+        # self.dif_cutoff = 10 ** -8
         self._stats_display = _Stats_Display(max_steps,mute)
 
         while self.total_step < max_steps and self.accepted_steps < target_accepted_steps:
@@ -46,7 +46,7 @@ class Iterator:
         if rebuild_every is None:
             rebuild_every = target_accepted_steps
         self.rebuild_every = rebuild_every
-        
+
         if not transfer_to_memory_every:
             transfer_to_memory_every = target_accepted_steps
         self.transfer_to_memory_every = transfer_to_memory_every
@@ -101,14 +101,14 @@ class Iterator:
 
         e_dif_components, e_mat, s_mat = self.energy.get_energy_dif(self._rotation_handler, change_indices[1], self.prev_e)
         e_dif_components = torch.stack(e_dif_components)
-        cur_e = torch.stack(self.energy.get_energy_components(self._rotation_handler, save_matr=False))
-        d = ((cur_e - self.prev_e)[1:3] - e_dif_components[1:3])
-        if abs(d[0]) > 10**-4 or abs(d[1]) > 10**-4:
-            print(d)
-        dif = self._rotation_handler.compare()
-        if dif[0] > self.dif_cutoff or dif[1] > self.dif_cutoff:
-            print(dif,self.total_step)
-            self.dif_cutoff *= 10
+        #cur_e = torch.stack(self.energy.get_energy_components(self._rotation_handler, save_matr=False))
+        # d = ((csur_e - self.prev_e)[1:3] - e_dif_components[1:3])
+        # if abs(d[0]) > 10**-4 or abs(d[1]) > 10**-4:
+        #     print(d)
+        # dif = self._rotation_handler.compare()
+        # if dif[0] > self.dif_cutoff or dif[1] > self.dif_cutoff:
+        #     print(dif,self.total_step)
+        #     self.dif_cutoff *= 10
 
         Del_E = e_dif_components.sum()
         r = torch.rand(1).item()
