@@ -164,16 +164,25 @@ class CG_Structure:
             **allign_sel** - selection for mda Universe. Atoms in this selection will be used to allign model in all frames.
             '''
 
-        n_parts = sum([protein.n_cg_beads for protein in self.rlsp_groups])
+        n_parts = sum([group.n_cg_beads for group in self.rlsp_groups])
+        n_proteins = sum([protein.n_cg_beads for protein in self.proteins])
 
-        segids = [item for i, group in enumerate(self.rlsp_groups) for item in [i]*group.n_cg_beads]
-        resnames = ['prot']*n_parts
+        segids = []
+        resnames = []
+        segid_ind = 1
+        for group in self.rlsp_groups:
+            if group.n_cg_beads > 6:
+                resnames += ['prot']*group.n_cg_beads
+                segids += [segid_ind]*group.n_cg_beads
+                segid_ind += 1
+            else:
+                resnames += ['dna']*group.n_cg_beads
+                segids += [0]*group.n_cg_beads
+        
         resids = np.arange(n_parts)
         coords = []
         for ts in self.dna.trajectory:
-            frame_coord = torch.tensor(self.dna.origins.reshape(1,-1,3))
-            if self.proteins:
-                frame_coord = torch.vstack([protein.origins for protein in self.proteins]).reshape(1,-1,3)
+            frame_coord = torch.tensor(self.origins.reshape(1,-1,3))
             coords.append(frame_coord)
         coords = torch.cat(coords).numpy()
         segid_names = ['D'] + [f'P{i}' for i in range(len(self.proteins))]
