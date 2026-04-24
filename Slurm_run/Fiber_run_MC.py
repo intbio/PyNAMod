@@ -21,7 +21,7 @@ args = parser.parse_args()
 cgs = pynamod.CG_Structure()
 file = h5py.File(args.h5file,'r')
 cgs.load_from_h5(file)
-cgs.dna.transfer_trajectory_to_h5(args.traj_file,'w')
+cgs.dna.transfer_trajectory_to_h5(args.traj_file,'w',compression="gzip",dtype=np.float16)
 
 en = pynamod.Energy()
 en.set_energy_matrices(cgs,ignore_neighbors=10)

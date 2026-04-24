@@ -11,7 +11,7 @@ class Trajectory:
         if attrs_names:
             self.attrs_names += attrs_names
 
-        self.cur_step = 0  
+        self.cur_step = 0
         self.traj_step = 1
 
     def __iter__(self):
@@ -23,12 +23,15 @@ class Trajectory:
 
         self.cur_step = 0
 
-    origins = property(fset=lambda self,value: self._set_frame_attr('origins',value),
+    origins = property(fset=lambda self, value: self._set_frame_attr('origins',value),
                        fget=lambda self: self._get_frame_attr('origins'))
-    ref_frames = property(fset=lambda self,value: self._set_frame_attr('ref_frames',value),
+    ref_frames = property(fset=lambda self, value: self._set_frame_attr('ref_frames',value),
                           fget=lambda self: self._get_frame_attr('ref_frames'))
-    local_params = property(fset=lambda self,value: self._set_frame_attr('local_params',value),
+    local_params = property(fset=lambda self, value: self._set_frame_attr('local_params',value),
                             fget=lambda self: self._get_frame_attr('local_params'))
+
+    rlsp_origins = property(fset=lambda self, value: self._set_frame_attr('rlsp_origins',value),
+                       fget=lambda self: self._get_frame_attr('rlsp_origins'))
 
 
 class Tensor_Trajectory(Trajectory):
@@ -67,54 +70,51 @@ class Tensor_Trajectory(Trajectory):
             else:
                 value = values_to_extend[attr]
             setattr(self,f'{attr}_traj',torch.concat([tensor,torch.tensor(value)]))
-            
+
     def add_attr(self,attr,shape):
         if attr in self.attrs:
             raise ValueError(f'Trajectory already has attribute {attr}')
-        
+
         self.res_trajectory.attrs_names.append(attr)
         self.res_trajectory.shapes.append(shape)
-        
+
         setattr(self,f'{attr}_traj',self.traj_class(torch.zeros((len(self),*shape),dtype=self.dtype),*self.traj_class_attrs))
-    
-    def get_attr_trajectory(self,attr):
+
+    def get_attr_trajectory(self, attr):
         return getattr(self,attr+'_traj')
-            
+
     def _create_frame(self):
         for attr,shape in zip(self.attrs_names,self.shapes):
             attr += '_traj'
             tensor = self.get_attr_trajectory(attr)
-            setattr(self,attr,torch.concat([tensor,torch.zeros(*shape[1:])]))   
-            
+            setattr(self, attr, torch.concat([tensor,torch.zeros(*shape[1:])]))   
+
     def _get_frame_attr(self,attr,frame=None):
         if not frame:
             frame = self.cur_step
         return self.get_attr_trajectory(attr)[frame]
-    
+
     def _set_frame_attr(self,attr,value,frame=None):
         if not frame:
             frame = self.cur_step
         if frame >= len(self):
             self._create_frame()
         self.get_attr_trajectory(attr)[frame] = value
-        
+
     def __len__(self):
         return self.origins_traj.shape[0]
-    
-    def __getitem__(self,sl):
-        
-        traj_len,data_len = self.shapes[0][:2]
+
+    def __getitem__(self, sl):
+
+        traj_len, data_len = self.shapes[0][:2]
         new = Tensor_Trajectory(self.dtype,traj_len,data_len,self.traj_class,*self.traj_class_attrs)
         new.shapes = self.shapes
         new.attrs_names = self.attrs_names
-        
+
         for attr in self.attrs_names:
             setattr(new,f'{attr}_traj',self.traj_class(self.get_attr_trajectory(attr)[sl],*self.traj_class_attrs))
-            
-        return new
 
-    rlsp_origins = property(fset=lambda self,value: self._set_frame_attr('rlsp_origins',value),
-                       fget=lambda self: self._get_frame_attr('rlsp_origins'))
+        return new
 
 class H5_Trajectory(Trajectory):
     def __init__(self,filename,data_len,mode='r',attrs_names=None,shapes=None,string_format_val=5,**kwards):
@@ -123,18 +123,25 @@ class H5_Trajectory(Trajectory):
         else:
             self.shapes = [(data_len,1,3),(data_len,3,3),(data_len,6)]
         super().__init__(attrs_names)
-        self.file = h5py.File(filename,mode)
+        self.file = h5py.File(filename, mode)
         self._dataset_kwards = kwards
         self.string_format_val = string_format_val
+
         if mode in ('w','x','w-'):
             self._last_frame_ind = -1
 
-        elif mode == 'r': 
+        elif mode == 'r':
             self._last_frame_ind = len(self.file) - 1
-            
+
         elif mode in ('r+','a'):
             self._last_frame_ind = self.cur_step = len(self.file) - 1
-            
+
+        if len(self) != 0:
+            for k in self.file[str(self._last_frame_ind).zfill(self.string_format_val)].keys():
+                if k not in self.attrs_names:
+                    self.attrs_names += [str(k)]
+                    self.shapes += self.file[str(self._last_frame_ind).zfill(self.string_format_val)][str(k)][:].shape
+
     def extend(self,other_traj=None,**values_to_extend):
         if other_traj:
             for step in other_traj:
@@ -142,33 +149,32 @@ class H5_Trajectory(Trajectory):
                 for attr in self.attrs_names:
                     attrs[attr] = other_traj._get_frame_attr(attr)
                 self.add_frame(self._last_frame_ind+1,**attrs)
-                
+
         else:
             for i in range(values_to_extend['origins_traj'].shape[0]):
                 attrs = {}
                 for attr in self.attrs_names:
                     attrs[attr] = values_to_extend[attr+'_traj']
-                
+
                 self.add_frame(self._last_frame_ind+1,**attrs)
-                
+
     def add_attr(self,attr,shape):
         if attr in self.attrs_names:
             raise ValueError(f'Trajectory already has attribute {attr}')
-        
+
         self.attrs_names.append(attr)
         self.shapes.append(shape)
-        
+
         for i in range(len(self)):
             self.file[str(i).zfill(self.string_format_val)].create_dataset(attr,shape=shape,**self._dataset_kwards)
-            
-            
+
     def add_frame(self,step,**attrs):
         if step > self._last_frame_ind:
             self._create_frame(step)
         for attr,value in attrs.items():
 
             self.file[str(self._last_frame_ind).zfill(self.string_format_val)][attr][:] = value
-            
+
     def copy(self,new):
         return self
 
@@ -188,14 +194,14 @@ class H5_Trajectory(Trajectory):
         if not frame:
             frame = self.cur_step
         return torch.from_numpy(self.file[str(frame).zfill(self.string_format_val)][attr][:])
-    
+
     def _set_frame_attr(self,attr,value,frame=None):
         if not frame:
             frame = self.cur_step
         if frame > self._last_frame_ind:
             self._create_frame(frame)
         self.file[str(frame).zfill(self.string_format_val)][attr][:] = value
-        
+
     def __len__(self):
         return self._last_frame_ind + 1
 

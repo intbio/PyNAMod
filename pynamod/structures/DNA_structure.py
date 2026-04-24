@@ -160,10 +160,14 @@ class DNA_Structure:
 
         return self
 
-    def transfer_trajectory_to_h5(self,filename,mode='r+',keep_old_frames=True,**datasets_kwards):
+    def transfer_trajectory_to_h5(self,filename,mode='r+',keep_single_old_frame=None,**datasets_kwards):
         old_traj = self.geom_params.trajectory
         self.geom_params.trajectory = H5_Trajectory(filename, len(self.pairs_list),mode=mode,**datasets_kwards)
-        if mode != 'r':
+        if keep_single_old_frame is not None:
+            old_traj.cur_step = keep_single_old_frame
+            for attr in self.geom_params.trajectory.attrs_names:
+                setattr(self.geom_params.trajectory,attr,getattr(old_traj,attr))
+        elif mode != 'r' and mode != 'r+':
             self.geom_params.trajectory.extend(old_traj)
         if isinstance(old_traj,H5_Trajectory):
             old_traj.file.close()

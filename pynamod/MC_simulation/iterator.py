@@ -9,26 +9,52 @@ class Iterator:
     def __init__(self, cg_structure, energy, sigma_transl=1, sigma_rot=1):
         self.cg_structure = cg_structure
         self.energy = energy
-        self._rotation_handler = _Rotation_Handler(sigma_transl,sigma_rot)
+        self._rotation_handler = _Rotation_Handler(sigma_transl, sigma_rot)
 
         self.res_trajectory = cg_structure.dna.geom_params.trajectory
 
     def run(self, target_accepted_steps=int(1e5), max_steps=int(1e6), transfer_to_memory_every=None, save_every=1, rebuild_every=400,
-            mute=False, KT_factor=1, integration_mod='minimize', device='cpu', traj_init_step=None, dtype=torch.float):
+            KT_factor=1, mute=False, integration_mode='minimize', device='cpu', traj_init_step=None, dtype=torch.float,debug = False):
+        '''Starts Monte Carlo Simulation.
+    
+            Attributes:
+    
+            - **target_accepted_steps** - number of accepted simulation steps to reach, default 1e5.
+    
+            - **max_steps** - maximum number of attempted steps. If reached run will be terminated even if target_accepted_steps was not matched. Default 1e6.
+    
+            - **transfer_to_memory_every** - When using gpu, accepted frames will be flushed to memory or h5 file (depending on trajectory of CG structure) each chosen number of accepted steps. If None will flush only at the end of the simulation. Default None.
+    
+            - **save_every** - Accepted frames will be saved in resulting trajectory every chosen number of accepted steps. Default 1.
 
+            - **rebuild_every** - Full procedure of rebuilding from bp step paramaters will be used every chosen number of accepted steps instead of simplified rotation and shift. This is necessary to negate computing error. The required frequency can be determined using debug (see debug attribute). Default 400.
+
+            - **KT_factor** - factor that will be used for KT from pynamod.Energy object in Metropolis criterion. Defailt 1.
+
+            - **mute** - If False, tqdm bars will be used to show simulation data, if True instead every 5 minutes number of accepted steps and acceptance rate will be printed. Default False.
+
+            - **integration_mode** - 'minimize' or 'random_step'. If minimize, Iterator will go through movable bp steps repeatedly using one of them as a changing bp step. If 'random_step', Iterator will choose a bp step to change randomly from movable bp steps. Default 'minimize'.
+
+            - **device** - pytorch style 'cpu' or 'cuda' ('cuda:n'). Device to use for simulations. Default 'cpu'.
+
+            - **traj_init_step** - If not None, frame from this trajectory step will be used as an initial conformation. If None, current step from trajectory is used. Default None.
+
+            - **dtype** - tensor dtype to use in calculations. Default torch.float.
+
+            - **debug** - 
+        '''
         self._prepare_system(target_accepted_steps, transfer_to_memory_every, rebuild_every,
-                             device, integration_mod, traj_init_step, KT_factor, dtype)
+                             device, integration_mode, traj_init_step, KT_factor, dtype, debug)
 
         self._stop_loop = False
         signal.signal(signal.SIGINT, self._signal_handler)
-        # self.dif_cutoff = 10 ** -8
         self._stats_display = _Stats_Display(max_steps,mute)
 
         while self.total_step < max_steps and self.accepted_steps < target_accepted_steps:
 
-            self._integration_step(save_every,integration_mod)
+            self._integration_step(save_every, integration_mode)
 
-            self._stats_display.show_step_data(self.accepted_steps,self.total_step,self.prev_e.sum().item())
+            self._stats_display.show_step_data(self.accepted_steps, self.total_step, self.prev_e.sum().item())
             #Stop only when a step is completed in case of keyboard interrupt.
             if self._stop_loop:
                 break
@@ -44,11 +70,13 @@ class Iterator:
             group.ref_vectors = group.ref_vectors.to(device)
 
     def _prepare_system(self, target_accepted_steps, transfer_to_memory_every, rebuild_every,
-                        device, integration_mod, traj_init_step, KT_factor, dtype):
+                        device, integration_mode, traj_init_step, KT_factor, dtype, debug):
         if rebuild_every is None:
             rebuild_every = target_accepted_steps
         self.rebuild_every = rebuild_every
-
+        if debug:
+            self.dif_cutoff = 10 ** -6
+        self.debug = debug
         if not transfer_to_memory_every:
             transfer_to_memory_every = target_accepted_steps
         self.transfer_to_memory_every = transfer_to_memory_every
@@ -58,6 +86,9 @@ class Iterator:
         cur_step = self.res_trajectory.cur_step
         self.res_trajectory.cur_step = traj_init_step
         self._create_tens_trajectory(dtype)
+        if 'rlsp_origins' not in self.res_trajectory.attrs_names:
+            self.res_trajectory.add_attr('rlsp_origins',self.trajectory.rlsp_origins.shape)
+            self.res_trajectory.rlsp_origins = self.trajectory.rlsp_origins
         self.to(device)
 
         if 'energies' not in self.res_trajectory.attrs_names:
@@ -68,17 +99,17 @@ class Iterator:
 
         self.res_trajectory.cur_step = cur_step
 
-        self._set_change_indices(integration_mod)
+        self._set_change_indices(integration_mode)
 
         self._scaled_KT = KT_factor*self.energy.KT
 
-    def _set_change_indices(self, integration_mod):
+    def _set_change_indices(self, integration_mode):
         self.movable_ind = torch.arange(self.trajectory.data_len, dtype=int)[self.cg_structure.dna.movable_steps]
         if self.movable_ind[0] == 0:
             self.movable_ind = self.movable_ind[1:]
-        if integration_mod == 'minimize':
+        if integration_mode == 'minimize':
             self.cur_movable_ind = 0
-        elif integration_mod == 'random_step':
+        elif integration_mode == 'random_step':
             self.movable_ind_len = self.movable_ind.shape[0]
 
     def _create_tens_trajectory(self, dtype):
@@ -96,21 +127,22 @@ class Iterator:
         self.trajectory.local_params = init_local_params
         self.trajectory.rlsp_origins = init_rlsp_ori
 
-    def _integration_step(self, save_every, integration_mod):
+    def _integration_step(self, save_every, integration_mode):
 
-        change_indices = self._get_cur_change_index(integration_mod)
+        change_indices = self._get_cur_change_index(integration_mode)
         self._rotation_handler.apply_rotation(change_indices, self.trajectory)
 
         e_dif_components, e_mat, s_mat = self.energy.get_energy_dif(self._rotation_handler, change_indices[1], self.prev_e)
         e_dif_components = torch.stack(e_dif_components)
-        #cur_e = torch.stack(self.energy.get_energy_components(self._rotation_handler, save_matr=False))
-        # d = ((csur_e - self.prev_e)[1:3] - e_dif_components[1:3])
-        # if abs(d[0]) > 10**-4 or abs(d[1]) > 10**-4:
-        #     print(d)
-        # dif = self._rotation_handler.compare()
-        # if dif[0] > self.dif_cutoff or dif[1] > self.dif_cutoff:
-        #     print(dif,self.total_step)
-        #     self.dif_cutoff *= 10
+        if self.debug:
+            cur_e = torch.stack(self.energy.get_energy_components(self._rotation_handler, save_matr=False))
+            energy_error = ((cur_e - self.prev_e) - e_dif_components)
+            if sum(abs(energy_error) > 0.01) > 0:
+                print(f'Energy difference error is {energy_error}')
+            pos_dif = self._rotation_handler.compare()
+            if pos_dif[0] > self.dif_cutoff or pos_dif[1] > self.dif_cutoff:
+                print(f'Origins error has reached {pos_dif[0]:6f} and ref_frames error has reached {pos_dif[1]:6f} at accepted step {self.accepted_steps}')
+                self.dif_cutoff *= 10
 
         Del_E = e_dif_components.sum()
         r = torch.rand(1).item()
@@ -152,13 +184,13 @@ class Iterator:
     def _signal_handler(self, signum, frame):
         self._stop_loop = True
 
-    def _get_cur_change_index(self, integration_mod):
-        if integration_mod == 'minimize':
+    def _get_cur_change_index(self, integration_mode):
+        if integration_mode == 'minimize':
             cur_index = self.cur_movable_ind
             self.cur_movable_ind += 1
             if self.cur_movable_ind == self.movable_ind.shape[0]:
                 self.cur_movable_ind = 0
-        elif integration_mod == 'random_step':
+        elif integration_mode == 'random_step':
             cur_index = torch.randint(self.movable_ind_len, (1,))
 
         ref_ori_change_index = self.movable_ind[cur_index]
@@ -170,12 +202,14 @@ class Iterator:
             steps = self.transfer_to_memory_every
 
         dna_len = self.trajectory.data_len
-        origins_traj = self.trajectory.origins_traj[:steps,:dna_len].numpy(force=True)
+        origins_traj = self.trajectory.origins_traj[:steps, :dna_len].numpy(force=True)
         ref_frames_traj = self.trajectory.ref_frames_traj[:steps].numpy(force=True)
         local_params_traj = self.trajectory.local_params_traj[:steps].numpy(force=True)
+        rlsp_origins_traj = self.trajectory.rlsp_origins_traj[:steps].numpy(force=True)
         energy_comp_traj = self.energy_comp_traj[:steps].numpy(force=True)
 
         for i in range(steps):
             self.res_trajectory.cur_step += 1
-            self.res_trajectory.add_frame(self.res_trajectory.cur_step, origins=origins_traj[i], ref_frames=ref_frames_traj[i],
-                                          local_params=local_params_traj[i],energies=energy_comp_traj[i])
+            self.res_trajectory.add_frame(self.res_trajectory.cur_step, origins=origins_traj[i],
+                                          ref_frames=ref_frames_traj[i], local_params=local_params_traj[i],
+                                          rlsp_origins=rlsp_origins_traj[i], energies=energy_comp_traj[i])

@@ -16,7 +16,7 @@ class Real_Space_Beads_Groups:
         self.charges = charges
         self.masses = masses
         self.radii = radii
-        if isinstance(eps, torch.Tensor):
+        if isinstance(eps, torch.Tensor) or self.n_cg_beads is None:
             self.eps = eps
         else:
             self.eps = torch.ones(n_cg_beads)*eps
@@ -33,13 +33,8 @@ class Real_Space_Beads_Groups:
         group.create_dataset('supdata', data=[self.n_cg_beads, self.ref_pair.ind, self.binded_dna_len], **dataset_kwards)
 
     def load_from_h5(self,file, group_name='rlsp_0_CG_parameters'):
-        try:
-            self.ref_vectors = torch.from_numpy(file[group_name]['ref_vectors'][:]).to(torch.double)
-        except KeyError as ker:
-            group_name = str(ker)[45:-16]
-            if group_name != 'protein':
-                raise ker
-
+                
+        self.ref_vectors = torch.from_numpy(file[group_name]['ref_vectors'][:]).to(torch.double)
         self.charges = torch.from_numpy(file[group_name]['charges'][:])
         self.radii = torch.from_numpy(file[group_name]['radii'][:])
         self.eps = torch.from_numpy(file[group_name]['eps'][:])
@@ -70,6 +65,9 @@ class Real_Space_Beads_Groups:
         self.eps = self.eps.to(device)
         self.ref_vectors = self.ref_vectors.to(device)
 
+    def __repr__(self):
+        return f'<Real Space Beads group with {self.n_cg_beads} CG beads and linked to {self.ref_pair.ind}th pair>' 
+    
     @property
     def origins(self):
         return self.get_true_pos()

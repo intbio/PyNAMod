@@ -5,13 +5,15 @@ import nglview as nv
 import torch
 import numpy as np
 import matplotlib as mpl
+import h5py
+from importlib.resources import files
 from MDAnalysis.topology.guessers import guess_atom_element
 from MDAnalysis.coordinates.memory import MemoryReader
 from MDAnalysis.analysis import align
 import matplotlib.pyplot as plt
 from pynamod.structures.DNA_structure import DNA_Structure
 from pynamod.structures.rlsp_group import Protein, Real_Space_Beads_Groups
-from pynamod.atomic_analysis.nucleotides_parser import check_if_nucleotide
+
 from pynamod.structures.nucleotides_models import Nucleotide_Creator
 
 
@@ -104,22 +106,34 @@ class CG_Structure:
     def save_to_h5(self, file, **dataset_kwards):
         self.dna.save_to_h5(file, **dataset_kwards)
         for i, protein in enumerate(self.rlsp_groups):
-            protein.save_to_h5(file, group_name=f'protein_{i}_CG_parameters', **dataset_kwards)
+            protein.save_to_h5(file, group_name=f'rlspg_{i}_CG_parameters', **dataset_kwards)
+
+    def load_symmetrical_nucleosome(self):
+        self.load_from_h5(h5py.File(files('pynamod').joinpath(f'structures/nucleosome_sym.h5')))
+        return self
 
     def load_from_h5(self, file):
         self.dna.load_from_h5(file)
         for i in range(len(file)-1):
-
-            if file[f'protein_{i}_CG_parameters']['supdata'][0] > 6:
-                protein = Protein(file[f'protein_{i}_CG_parameters']['supdata'][0])
-                ref_ind = protein.load_from_h5(file, group_name=f'protein_{i}_CG_parameters')
+            group_name = f'rlspg_{i}_CG_parameters'
+            try:
+                t = file[group_name]
+            except KeyError as ker:
+                name = str(ker)[46:51]
+                if name != 'rlspg':
+                    raise ker
+                group_name = 'protein' + group_name[5:]
+                
+            if file[group_name]['supdata'][0] > 6:
+                protein = Protein()
+                ref_ind = protein.load_from_h5(file, group_name=group_name)
                 protein.ref_pair = self.dna.pairs_list[ref_ind]
                 protein.cg_structure = self
                 self.rlsp_groups.append(protein)
                 self.proteins.append(protein)
             else:
-                rlsp = Real_Space_Beads_Groups(file[f'protein_{i}_CG_parameters']['supdata'][0])
-                ref_ind = rlsp.load_from_h5(file, group_name=f'protein_{i}_CG_parameters')
+                rlsp = Real_Space_Beads_Groups()
+                ref_ind = rlsp.load_from_h5(file, group_name=group_name)
                 rlsp.ref_pair = self.dna.pairs_list[ref_ind]
                 rlsp.cg_structure = self
                 self.rlsp_groups.append(rlsp)
@@ -178,7 +192,7 @@ class CG_Structure:
             else:
                 resnames += ['dna']*group.n_cg_beads
                 segids += [0]*group.n_cg_beads
-        
+
         resids = np.arange(n_parts)
         coords = []
         for ts in self.dna.trajectory:
@@ -313,7 +327,10 @@ class CG_Structure:
 
     @property
     def origins(self):
-        return torch.vstack([group.origins for group in self.rlsp_groups])
+        if 'rlsp_origins' in self.dna.trajectory.attrs_names:
+            return torch.tensor(self.dna.trajectory.rlsp_origins)
+        else:
+            return torch.vstack([group.origins for group in self.rlsp_groups])
 
     @property
     def radii(self):
