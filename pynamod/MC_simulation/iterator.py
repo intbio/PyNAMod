@@ -40,6 +40,8 @@ class Iterator:
         self.trajectory.to(device)
         self.energy.to(device)
         self._rotation_handler.to(device)
+        for group in self.cg_structure.rlsp_groups:
+            group.ref_vectors = group.ref_vectors.to(device)
 
     def _prepare_system(self, target_accepted_steps, transfer_to_memory_every, rebuild_every,
                         device, integration_mod, traj_init_step, KT_factor, dtype):

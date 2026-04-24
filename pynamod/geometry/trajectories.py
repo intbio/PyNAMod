@@ -112,7 +112,9 @@ class Tensor_Trajectory(Trajectory):
             setattr(new,f'{attr}_traj',self.traj_class(self.get_attr_trajectory(attr)[sl],*self.traj_class_attrs))
             
         return new
-        
+
+    rlsp_origins = property(fset=lambda self,value: self._set_frame_attr('rlsp_origins',value),
+                       fget=lambda self: self._get_frame_attr('rlsp_origins'))
 
 class H5_Trajectory(Trajectory):
     def __init__(self,filename,data_len,mode='r',attrs_names=None,shapes=None,string_format_val=5,**kwards):

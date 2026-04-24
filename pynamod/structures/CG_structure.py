@@ -268,7 +268,6 @@ class CG_Structure:
 
             **device** - could be 'cuda' or 'cpu' - device to send tensors to.
             '''
-        self.all_coords.to(device)
         self.dna.to(device)
         for group in self.rlsp_groups:
             group.to(device)
