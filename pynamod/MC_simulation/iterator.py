@@ -14,7 +14,7 @@ class Iterator:
         self.res_trajectory = cg_structure.dna.geom_params.trajectory
 
     def run(self, target_accepted_steps=int(1e5), max_steps=int(1e6), transfer_to_memory_every=None, save_every=1, rebuild_every=400,
-            KT_factor=1, mute=False, integration_mode='minimize', device='cpu', traj_init_step=None, dtype=torch.float,debug = False):
+            KT_factor=1, mute=False, integration_mode='minimize', device='cpu', traj_init_step=None, dtype=torch.float,debug = False,output=None):
         '''Starts Monte Carlo Simulation.
     
             Attributes:
@@ -48,7 +48,7 @@ class Iterator:
 
         self._stop_loop = False
         signal.signal(signal.SIGINT, self._signal_handler)
-        self._stats_display = _Stats_Display(max_steps,mute)
+        self._stats_display = _Stats_Display(max_steps,mute,output)
 
         while self.total_step < max_steps and self.accepted_steps < target_accepted_steps:
 

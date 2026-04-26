@@ -17,7 +17,8 @@ class Trajectory:
     def __iter__(self):
         self.cur_step = 0
         for i in range(len(self)):
-
+            if self.cur_step > len(self) - 1:
+                break
             yield self.cur_step
             self.cur_step += self.traj_step
 
