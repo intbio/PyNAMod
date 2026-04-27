@@ -307,7 +307,7 @@ class Nucleotide:
 
     @e_residue.setter
     def e_residue(self, value):
-        self.__setter('e_residue', value)
+        self._setter('e_residue', value)
 
     @property
     def next_nucleotide(self):
