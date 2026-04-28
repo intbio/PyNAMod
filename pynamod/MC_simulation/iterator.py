@@ -1,14 +1,10 @@
 import signal
-<<<<<<< HEAD
+
 from pynamod.geometry.trajectories import Tensor_Trajectory
 from pynamod.MC_simulation.stats_display import _Stats_Display
-=======
 
-import numpy as np
 import torch
 
-from pynamod.geometry.trajectories import H5_Trajectory, Tensor_Trajectory
->>>>>>> 4c2722a3fcadace9ef261cd86d95e432a14f8376
 from pynamod.MC_simulation.rotation_handler import _Rotation_Handler
 from pynamod.MC_simulation.stats_display import _Stats_Display
 
