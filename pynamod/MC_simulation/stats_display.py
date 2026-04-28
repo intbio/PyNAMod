@@ -1,5 +1,7 @@
 import time
+
 from tqdm.auto import tqdm
+
 
 class _Stats_Display:
     def __init__(self,max_steps,mute,output):
@@ -10,7 +12,7 @@ class _Stats_Display:
         self.output = output
         self.print_output("Start time: "+time.strftime('%D %H:%M:%S',time.localtime()))
 
-    def show_step_data(self,accepted_steps,total_steps,prev_e):
+    def show_step_data(self, accepted_steps, total_steps, prev_e):
         self.acceptance_rate = 100*accepted_steps/total_steps
         if self._mute:
             cur_time = time.time()
@@ -43,3 +45,4 @@ class _Stats_Display:
         else:
             with open(self.output,'a') as f:
                 f.write(string+'\n')
+

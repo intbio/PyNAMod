@@ -4,7 +4,7 @@ from pynamod.geometry.bp_step_geometry import Geometry_Functions
 
 
 class _Rotation_Handler(Geometry_Functions):
-    def __init__(self,sigma_transl,sigma_rot):
+    def __init__(self, sigma_transl, sigma_rot):
         self.sigma_transl = sigma_transl
         self.sigma_rot = sigma_rot
 
@@ -42,3 +42,4 @@ class _Rotation_Handler(Geometry_Functions):
         trajectory.ref_frames = self.ref_frames
         trajectory.local_params = self.local_params
         trajectory.rlsp_origins = self.rlsp_origins
+
