@@ -1,8 +1,17 @@
-import torch
 import signal
+<<<<<<< HEAD
 from pynamod.geometry.trajectories import Tensor_Trajectory
 from pynamod.MC_simulation.stats_display import _Stats_Display
+=======
+
+import numpy as np
+import torch
+
+from pynamod.geometry.trajectories import H5_Trajectory, Tensor_Trajectory
+>>>>>>> 4c2722a3fcadace9ef261cd86d95e432a14f8376
 from pynamod.MC_simulation.rotation_handler import _Rotation_Handler
+from pynamod.MC_simulation.stats_display import _Stats_Display
+
 
 
 class Iterator:
@@ -104,6 +113,7 @@ class Iterator:
         self._scaled_KT = KT_factor*self.energy.KT
 
     def _set_change_indices(self, integration_mode):
+
         self.movable_ind = torch.arange(self.trajectory.data_len, dtype=int)[self.cg_structure.dna.movable_steps]
         if self.movable_ind[0] == 0:
             self.movable_ind = self.movable_ind[1:]
@@ -147,7 +157,6 @@ class Iterator:
         Del_E = e_dif_components.sum()
         r = torch.rand(1).item()
         self.total_step += 1
-
         if not Del_E.isnan() and Del_E < 0 or (not (torch.isinf(torch.exp(Del_E))) and (r  <= torch.exp(-Del_E/self._scaled_KT))):
             self.energy.update_matrices(e_mat, s_mat, change_indices[1])
             self.prev_e += e_dif_components
@@ -190,6 +199,7 @@ class Iterator:
             self.cur_movable_ind += 1
             if self.cur_movable_ind == self.movable_ind.shape[0]:
                 self.cur_movable_ind = 0
+                
         elif integration_mode == 'random_step':
             cur_index = torch.randint(self.movable_ind_len, (1,))
 
@@ -213,3 +223,4 @@ class Iterator:
             self.res_trajectory.add_frame(self.res_trajectory.cur_step, origins=origins_traj[i],
                                           ref_frames=ref_frames_traj[i], local_params=local_params_traj[i],
                                           rlsp_origins=rlsp_origins_traj[i], energies=energy_comp_traj[i])
+
