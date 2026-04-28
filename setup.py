@@ -1,5 +1,4 @@
 import setuptools
-
 setuptools.setup(
      name="pynamod",
      version="0.1",
@@ -10,6 +9,6 @@ setuptools.setup(
      include_package_data=True,
      classifiers=[
         "Programming Language :: Python :: 3",
-         "Operating System :: OS Independent",
+        "Operating System :: OS Independent",
     ]
 )
