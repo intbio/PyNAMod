@@ -1,0 +1,3 @@
+'''
+This subpackage contains modules that build coarse-grained structures based on full atomic structures. The analysis starts with nucleotides_parser module that determines all nucleotides in a given structure. Reference structure nucleotides to compare to are stored in base_structures module. pairs_parser determines pairs of found nucleotides using machine learning with parameters saved in classifier.pkl file. Resulting data is stored by subclasses of Structure_Storage from structures_storages and data of a single nucleotide or base pair is represented by Nucleotide and Base_Pair classes from nucleotides_parser and pairs_parser respectively.
+'''

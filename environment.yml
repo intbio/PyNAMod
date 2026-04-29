@@ -1,25 +1,28 @@
+name: pynamod
+
 channels:
-  - pytorch
-  - defaults
   - conda-forge
-  - nvidia
   - pip
 
 dependencies:
-  - python=3.11.9
+  - python=3.13
+  - pip
   - ipykernel
-  - pypdb=2.4
+  - biopython
+  - mdanalysis
+  - pypdb
   - numba
-  - nglview=3.0.3
-  - pytorch=2.3.1
-  - pytorch-cuda=12.1
+  - nglview=3.1.4
+  - setuptools<80
   - seaborn
   - more-itertools
   - pytest
   - ipywidgets
-  - h5py
-  - biopython
-  - scikit-learn=1.4.2
+  - onnxruntime
+  - networkx<3.6.1
+
   - pip:
+      - --extra-index-url https://download.pytorch.org/whl/cu130
+      - --find-links https://data.pyg.org/whl/torch-2.9.0+cu130.html
+      - torch==2.9.*
       - pdb2pqr
-      - mdanalysis
