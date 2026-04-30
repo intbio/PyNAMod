@@ -19,9 +19,15 @@ class _Real_Space_Energy_Calculator():
         self.sp_en_mat = None
         
     def to(self,device):
-        self.radii_sum_prod = self.radii_sum_prod.to(device)
+        radii_sum_prod,charges_multipl_prod,dist_mat_slice = self._energy_matrices()
+        self.radii_sum_prod = radii_sum_prod.to(device)
         #self.epsilon_mean_prod = self.epsilon_mean_prod.to(device)
-        self.charges_multipl_prod = self.charges_multipl_prod.to(device)
+        self.charges_multipl_prod = charges_multipl_prod.to(device)
+        self.dist_mat_slice = dist_mat_slice.to(device)
+        if self.es_en_mat is not None:
+            self.es_en_mat = self.es_en_mat.to(device)
+        if self.sp_en_mat is not None:
+            self.sp_en_mat = self.sp_en_mat.to(device)
             
         
     def set_energy_matrices(self,CG_structure,ignore_neighbors,ignore_protein_neigbors,set_dist_mat_sl):
@@ -47,9 +53,10 @@ class _Real_Space_Energy_Calculator():
         # old_e_mat[sl] = 0
         
     def get_energy_dif(self,prot_origins,prot_change_index):
+        radii_sum_prod,charges_multipl_prod,_ = self._energy_matrices()
         
-        radii_sum_prods = self._get_matr_slices(self.radii_sum_prod,prot_change_index)
-        charges_multipl_prods = self._get_matr_slices(self.charges_multipl_prod,prot_change_index)
+        radii_sum_prods = self._get_matr_slices(radii_sum_prod,prot_change_index)
+        charges_multipl_prods = self._get_matr_slices(charges_multipl_prod,prot_change_index)
         
         dist_matrix = self._cdist(prot_origins[:prot_change_index],prot_origins[prot_change_index:])
         electrostatic2,e_mat = self._get_electrostatic_e(dist_matrix,charges_multipl_prods)
@@ -63,7 +70,7 @@ class _Real_Space_Energy_Calculator():
             
     def _set_dist_mat_slice(self,CG_structure):
         prot_len = sum([protein.n_cg_beads for protein in CG_structure.proteins])
-        dist_mat_slice = torch.ones(prot_len,prot_len,dtype=bool)
+        dist_mat_slice = torch.ones(prot_len,prot_len,dtype=torch.bool)
         dist_mat_slice = torch.triu(dist_mat_slice)
         vert_start = 0 
         for protein in CG_structure.proteins:
@@ -96,21 +103,29 @@ class _Real_Space_Energy_Calculator():
     def _get_matr_slices(self,mat,prot_ind):
 
         return mat[:prot_ind,prot_ind:]
-    
+
+    def _energy_matrices(self):
+        assert self.radii_sum_prod is not None
+        assert self.charges_multipl_prod is not None
+        assert self.dist_mat_slice is not None
+        return self.radii_sum_prod,self.charges_multipl_prod,self.dist_mat_slice
+
     def _mod_real_space_mat(self):
-        inv = ~self.dist_mat_slice
-        self.radii_sum_prod[inv] = 0
-        self.charges_multipl_prod[inv] = 0
+        radii_sum_prod,charges_multipl_prod,dist_mat_slice = self._energy_matrices()
+        inv = ~dist_mat_slice
+        radii_sum_prod[inv] = 0
+        charges_multipl_prod[inv] = 0
         
     
     def _get_real_space_total_energy(self,origins,prot_origins,save_matr=True):
+        radii_sum_prod,charges_multipl_prod,dist_mat_slice = self._energy_matrices()
 
         total_es = torch.tensor(0,device=origins.device,dtype=origins.dtype)
         total_sp = torch.tensor(0,device=origins.device,dtype=origins.dtype)
 
         dist_matrix = self._cdist(prot_origins,prot_origins)
-        dist_matrix = dist_matrix[self.dist_mat_slice]
-        radii_sum_prod,charges_multipl_prod = self.radii_sum_prod[self.dist_mat_slice],self.charges_multipl_prod[self.dist_mat_slice]
+        dist_matrix = dist_matrix[dist_mat_slice]
+        radii_sum_prod,charges_multipl_prod = radii_sum_prod[dist_mat_slice],charges_multipl_prod[dist_mat_slice]
         es,e_mat = self._get_electrostatic_e(dist_matrix,charges_multipl_prod)
         sp,s_mat = self._get_spatial_e(dist_matrix,radii_sum_prod)
         total_sp += sp
@@ -118,18 +133,20 @@ class _Real_Space_Energy_Calculator():
 
         if save_matr:
             self.es_en_mat = torch.zeros(prot_origins.shape[0],prot_origins.shape[0],device=e_mat.device,dtype=e_mat.dtype)
-            self.es_en_mat[self.dist_mat_slice] = e_mat
+            self.es_en_mat[dist_mat_slice] = e_mat
             self.sp_en_mat = torch.zeros(prot_origins.shape[0],prot_origins.shape[0],device=s_mat.device,dtype=s_mat.dtype)
-            self.sp_en_mat[self.dist_mat_slice] = s_mat
+            self.sp_en_mat[dist_mat_slice] = s_mat
                    
         return total_es,total_sp
 
     def _get_real_space_softmax_energy(self,origins,*args,**kwards):
+        radii_sum_prod,_,dist_mat_slice = self._energy_matrices()
+
         dist_matrix = self._cdist(origins,origins)
-        dist_matrix = dist_matrix[self.dist_mat_slice]
-        radii_sum_prod = self.radii_sum_prod[self.dist_mat_slice]**2
+        dist_matrix = dist_matrix[dist_mat_slice]
+        radii_sum_prod = radii_sum_prod[dist_mat_slice]**2
         energy = self.K_free*(((radii_sum_prod/(dist_matrix**2+0.0001*radii_sum_prod))**6).sum())
-        return torch.tensor(0,device = self.radii_sum_prod.device),energy
+        return torch.tensor(0,device=origins.device,dtype=energy.dtype),energy
     
     def _get_electrostatic_e(self,dist_matrix,charges_multipl_prod):
         div = charges_multipl_prod/dist_matrix

@@ -69,8 +69,10 @@ class Iterator:
 
     def _set_change_indices(self, integration_mod):
         self.movable_ind = torch.arange(self.trajectory.data_len, dtype=int)[self.cg_structure.dna.movable_steps]
-        if self.movable_ind[0] == 0:
+        if self.movable_ind.shape[0] > 0 and self.movable_ind[0] == 0:
             self.movable_ind = self.movable_ind[1:]
+        if self.movable_ind.shape[0] == 0:
+            raise ValueError('No movable DNA steps available for MC simulation. Set cg_structure.dna.movable_steps[1:] = True or build/analyze DNA with movable=True.')
         if integration_mod == 'minimize':
             self.cur_movable_ind = 0
         elif integration_mod == 'random_step':

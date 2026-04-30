@@ -15,9 +15,6 @@ from pynamod.atomic_analysis.mda_element_guess import (add_guessed_elements,
 from pynamod.structures.DNA_structure import DNA_Structure
 from pynamod.structures.protein import Protein
 
-warnings.filterwarnings('ignore', category=DeprecationWarning)
-warnings.filterwarnings('ignore', category=UserWarning)
-
 
 class CG_Structure:
     '''CG_Structure is one of the main classes of PyNAMod package. It contains DNA structure and proteins structures that are attached to it. It supports analysis and generation, summation, visualization of CG structures. Slices of this class return CG structure with DNA that includes nucleotide pairs with indexes in slice and proteins that have reference pair in sliced structure.
