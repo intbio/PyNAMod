@@ -20,10 +20,11 @@ dependencies:
   - more-itertools=10.8.0
   - pytest=9.0.2
   - ipywidgets=8.1.7
-  - onnxruntime
   - networkx<3.6.1
+  - onnxruntime
 
   - pip:
       - --extra-index-url https://download.pytorch.org/whl/cu130
-      - torch
+      - --find-links https://data.pyg.org/whl/torch-2.9.0+cu130.html
+      - torch==2.9.*
       - pdb2pqr

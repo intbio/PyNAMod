@@ -1,5 +1,4 @@
 import torch
-from scipy.spatial.distance import cdist, squareform
 
 from pynamod.energy.elastic_energy import _Elastic_Energy_Calculator
 from pynamod.energy.energy_constants import *

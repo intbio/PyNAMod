@@ -1,5 +1,4 @@
 import torch
-from scipy.spatial.transform import Rotation as R
 
 
 class Geometry_Functions:

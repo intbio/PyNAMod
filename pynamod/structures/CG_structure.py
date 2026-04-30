@@ -68,6 +68,7 @@ class CG_Structure:
             self.proteins = []
 
             self.rlsp_groups = []
+        self.nucleotides_model = nucleotides_model
 
     def __repr__(self):
         n_pairs = len(self.dna.pairs_list) if getattr(self.dna, 'pairs_list', None) else 0

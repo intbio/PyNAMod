@@ -5,7 +5,6 @@ from itertools import combinations
 import numpy as np
 import onnxruntime as ort
 import torch
-from more_itertools import pairwise
 from scipy.spatial.distance import pdist
 from scipy.spatial.transform import Rotation as R
 
