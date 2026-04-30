@@ -30,30 +30,30 @@ class Geometrical_Parameters(Geometry_Functions):
         if not empty:
             self.get_new_params_set(local_params, ref_frames, origins)
 
-    def to(self, device):
-        self.trajectory.ref_frames_traj = mod_Tensor(self.trajectory.ref_frames_traj.to(device), self)
-        self.trajectory.origins_traj = mod_Tensor(self.trajectory.origins_traj.to(device), self)
-        self.trajectory.local_params_traj = mod_Tensor(self.trajectory.local_params_traj.to(device), self)
+    def to(self,device):
+        self.trajectory.ref_frames_traj = mod_Tensor(self.trajectory.ref_frames_traj.to(device),self)
+        self.trajectory.origins_traj = mod_Tensor(self.trajectory.origins_traj.to(device),self)
+        self.trajectory.local_params_traj = mod_Tensor(self.trajectory.local_params_traj.to(device),self)
 
-    def get_new_params_set(self, local_params=None, ref_frames=None, origins=None):
+    def get_new_params_set(self,local_params = None, ref_frames = None, origins = None):
         set_from_local_params = local_params is not None
         set_from_r_and_o = ref_frames is not None and origins is not None
 
-        self._auto_rebuild_sw = False
+        self._auto_rebuild_sw = False 
 
         if set_from_r_and_o and set_from_local_params:
 
             if not origins.dtype == ref_frames.dtype == local_params.dtype:
                 raise TypeError("Dtypes don't match")
 
-            self._set_from_all_params(local_params, ref_frames, origins)
+            self._set_from_all_params(local_params,ref_frames,origins)
 
         elif set_from_r_and_o:
 
             if origins.dtype != ref_frames.dtype:
                 raise TypeError("Origins and reference frames dtypes don't match")
 
-            self._set_from_r_and_o(ref_frames, origins)
+            self._set_from_r_and_o(ref_frames,origins)
 
         elif set_from_local_params:
 
@@ -61,6 +61,37 @@ class Geometrical_Parameters(Geometry_Functions):
 
         else:
             raise TypeError('Geometrical_parameters should be initialized with local parameters or reference frames and origins')
+
+        self._auto_rebuild_sw = self.auto_rebuild
+        return self
+
+    def _set_from_all_params(self,local_params,ref_frames,origins):
+        for attr in ('ref_frames','origins','local_params'):
+            tens = locals()[attr]
+            setattr(self,attr,tens)
+
+    def _set_from_r_and_o(self,ref_frames,origins):
+        self.ref_frames = ref_frames
+        self.origins = origins    
+        self.local_params = torch.zeros(self.len,6,dtype=self.dtype)
+        self.rebuild('rebuild_local_params') 
+
+    def _set_from_local_params(self,local_params):
+        self.local_params = local_params
+        self.ref_frames = torch.zeros((self.len,3,3),dtype=self.dtype)
+        self.origins = torch.zeros((self.len,1,3),dtype=self.dtype)
+        self.rebuild('rebuild_ref_frames_and_ori')
+
+    def copy(self):
+        new = Geometrical_Parameters(empty=True,pair_params=self.pair_params)
+        new.trajectory = self.trajectory.copy(new)
+        return new
+
+    def rebuild(self,rebuild_func_name,*args,**kwards):
+        self._auto_rebuild_sw = False
+
+        getattr(self,rebuild_func_name)(*args,**kwards)
+
 
         self._auto_rebuild_sw = self.auto_rebuild
         return self

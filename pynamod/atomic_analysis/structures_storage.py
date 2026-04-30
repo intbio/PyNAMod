@@ -25,30 +25,31 @@ class Structures_Storage:
         for name, value in zip(structure_attrs_list, stored_params):
             setattr(self, self.get_name(name), value)
 
-    def append(self, *attrs):
+    def append(self,*attrs):
         '''
         Appends given data to this object. All provided attributes should have the same length for a proper work of a class. Addition is defined to combine two objects.
         '''
-        if len(attrs) == 1 and isinstance(attrs[0], self.structure_class):
-            attrs = [getattr(attrs[0], name) for name in self.structure_attrs_list]
+        if len(attrs) == 1 and isinstance(attrs[0],self.structure_class):
+            attrs = [getattr(attrs[0],name) for name in self.structure_attrs_list]
 
-        for name, value in zip(self.structure_attrs_list, attrs):
-            if isinstance(value, torch.Tensor):
-                tens = getattr(self, self.get_name(name))
+        for name,value in zip(self.structure_attrs_list,attrs):
+            if isinstance(value,torch.Tensor):
+                tens = getattr(self,self.get_name(name))
                 if tens.dim() != value.dim():
-                    value = value.reshape(1, *value.shape)
-                setattr(self, self.get_name(name), torch.cat([tens, value]))
+                    value = value.reshape(1,*value.shape)
+                setattr(self,self.get_name(name),torch.cat([tens,value]))
 
             else:
-                getattr(self, self.get_name(name)).append(value)
+                getattr(self,self.get_name(name)).append(value)
 
         return self
 
     def _ls(self, item, attrs):
-        return tuple(getattr(self, self.get_name(attr))[item] for attr in attrs)
+        return tuple(getattr(self,self.get_name(attr))[item] for attr in attrs)
 
     def _argsort(self, attrs):
-        return sorted(range(len(getattr(self, self.get_name(attrs[0])))), key=lambda item: self._ls(item, attrs=attrs))
+        return sorted(range(len(getattr(self,self.get_name(attrs[0])))), key=lambda item: self._ls(item,attrs=attrs))
+
 
     def sort(self, *attrs):
         '''
@@ -68,7 +69,12 @@ class Structures_Storage:
         return self
 
     def get_name(self, attr):
-        return attr + 's' if not attr[-2:] == 'us' else attr[:-2] + 'i'
+        if attr[-2:] == 'us':
+            return attr[:-2] + 'i'
+        elif attr[-1] == 's':
+            return attr
+        else:
+            return attr + 's'
 
     def __sl_isintance(self, sl_value, classes):
         return isinstance(sl_value, classes) or np.issubdtype(type(sl_value), classes[1]) or (isinstance(sl_value, torch.Tensor) and isinstance(sl_value.item(), classes))
@@ -126,6 +132,7 @@ class Structures_Storage:
                         item = [attr_val[i] for i in sl]
                     item_attrs.append(item)
 
+
             new_storage = self.copy()
             for attr, item in zip(self.structure_attrs_list, item_attrs):
                 setattr(new_storage, self.get_name(attr), item)
@@ -165,6 +172,7 @@ class Structures_Storage:
         return self
 
     def __len__(self):
+
         return len(getattr(self, self.get_name(self.structure_attrs_list[0])))
 
     def save_to_h5(self, file, group_name, **dataset_kwards):
@@ -182,6 +190,7 @@ class Structures_Storage:
         group = file.create_group(group_name)
         for attr in self.structure_attrs_list:
             attr = self.get_name(attr)
+
             if not isinstance(getattr(self, attr)[0], (Geometrical_Parameters, AtomGroup)):
                 group.create_dataset(attr, data=getattr(self, attr), **dataset_kwards)
 
@@ -208,6 +217,7 @@ class Structures_Storage:
             if isinstance(data[0], bytes):
                 data = [d.decode() for d in data]
 
+
             setattr(self, name, data)
 
         for attr in self.structure_attrs_list:
@@ -223,6 +233,7 @@ class Structures_Storage:
             else:
                 setattr(new, self.get_name(attr), getattr(self, self.get_name(attr)).copy())
 
+
         return new
 
 
@@ -235,6 +246,7 @@ class Nucleotides_Storage(Structures_Storage):
         self.mda_u = u
         structure_attrs_list = ['restype', 'resid', 'segid', 'leading_strand', 'ref_frame', 'origin', 's_residue', 'e_residue']
         if not stored_params:
+
             stored_params = [[], [], [], [], torch.empty(0, 3, 3, dtype=torch.double), torch.empty(0, 1, 3, dtype=torch.double), [], []]
 
         super().__init__(nucleotide_class, structure_attrs_list, *stored_params)
@@ -257,6 +269,7 @@ class Pairs_Storage(Structures_Storage):
         self.nucleotides_storage = nucleotides_storage
         structure_attrs_list = ['lead_nucl_ind', 'lag_nucl_ind', 'radius', 'charge', 'epsilon', 'geom_params']
         if not stored_params:
+
             stored_params = [[], [], [], [], [], [], []]
 
         super().__init__(pair_class, structure_attrs_list, *stored_params)
@@ -271,6 +284,7 @@ class Pairs_Storage(Structures_Storage):
         new_seq = self._argsort(['lead_nucl_ind'])
 
         for name in self.structure_attrs_list:
+
             attr_value = getattr(self, self.get_name(name))
             if isinstance(attr_value, torch.Tensor):
                 sorted_data = attr_value[new_seq]
@@ -290,6 +304,7 @@ class Pairs_Storage(Structures_Storage):
         else:
             return self[leading_strands] + self[[not i for i in leading_strands]]
 
+
     def __getitem__(self, sl):
         item = super().__getitem__(sl)
         if isinstance(item, Pairs_Storage):
@@ -307,6 +322,7 @@ class Pairs_Storage(Structures_Storage):
         new.nucleotides_storage = self.nucleotides_storage
         return new
 
+
     def load_from_h5(self, file, group_name):
         super().load_from_h5(file, group_name)
 
@@ -314,4 +330,4 @@ class Pairs_Storage(Structures_Storage):
         ref_frames = torch.as_tensor(np.asarray(file[group_name]['pair_ref_frames']))
         origins = torch.as_tensor(np.asarray(file[group_name]['pair_origins']))
         params_sets = [[torch.vstack([torch.zeros(1, *p.shape), p.reshape(1, *p.shape)]) for p in (pars, oris, rfs)] for (pars, rfs, oris) in zip(pair_params, ref_frames, origins)]
-        self.geom_paramss = [Geometrical_Parameters(local_params=pars, origins=oris, ref_frames=rfs) for (pars, oris, rfs) in params_sets]
+        self.geom_params = [Geometrical_Parameters(local_params=pars, origins=oris, ref_frames=rfs) for (pars, oris, rfs) in params_sets]

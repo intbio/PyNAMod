@@ -1,6 +1,11 @@
 import io
 
 import matplotlib as mpl
+import h5py
+from importlib.resources import files
+from MDAnalysis.topology.guessers import guess_atom_element
+from MDAnalysis.coordinates.memory import MemoryReader
+from MDAnalysis.analysis import align
 import matplotlib.pyplot as plt
 import MDAnalysis as mda
 import nglview as nv
@@ -13,7 +18,9 @@ from MDAnalysis.coordinates.memory import MemoryReader
 from pynamod.atomic_analysis.mda_element_guess import (add_guessed_elements,
                                                        load_pdb_universe)
 from pynamod.structures.DNA_structure import DNA_Structure
-from pynamod.structures.protein import Protein
+from pynamod.structures.rlsp_group import Protein, Real_Space_Beads_Groups
+
+from pynamod.structures.nucleotides_models import Nucleotide_Creator
 
 
 class CG_Structure:
@@ -25,13 +32,13 @@ class CG_Structure:
 
         - **proteins** - list of Protein objects.
 
-        - **all_coords** - All_Coords object that contains geometrical parameters of pairs steps in DNA structure, reference frames of these steps and origins of beads associated with these steps and of proteins CG beads. This object could also store trajectories of geometrical parameters.
-
         - **u** - (optional) contains initial mda Universe if given.
     '''
 
-    def __init__(self, dna_structure=None, proteins=None, mdaUniverse=None, pdb_id=None, file=None,
-                 all_coords=None, add_proteins=True, trajectory=None):
+    def __init__(self, dna_structure=None, proteins=None, mdaUniverse=None,
+                 pdb_id=None, file=None, add_proteins=True,
+                 nucleotides_model = '1spbp', trajectory=None):
+
         if mdaUniverse:
             self.u = mdaUniverse
         elif pdb_id:
@@ -51,16 +58,21 @@ class CG_Structure:
             self.dna = DNA_Structure(u=self.u)
 
         self.dna.cg_structure = self
+
         if proteins:
             self.proteins = proteins
             for protein in proteins:
                 protein.cg_structure = self
+            self.rlsp_groups = proteins.copy()
         else:
             self.proteins = []
 
+            self.rlsp_groups = []
+        self.nucleotides_model = nucleotides_model
+
     def __repr__(self):
         n_pairs = len(self.dna.pairs_list) if getattr(self.dna, 'pairs_list', None) else 0
-        return f'<CG_Structure DNA_pairs={n_pairs} proteins={len(self.proteins)}>'
+        return f'<CG_Structure with {n_pairs} DNA pairs and {len(self.proteins)} proteins>'
 
     def analyze_dna(self, leading_strands=None, pairs_in_structure=None, sel='(type C or type O or type N) and not protein',
                     trajectory=None, overwrite_existing_dna=False, movable=False, use_full_nucleotide=False):
@@ -76,15 +88,20 @@ class CG_Structure:
 
             **movable** - boolean default value to set for each step for Carlo Simulations.
         '''
+
         if self.dna.pairs_list and not overwrite_existing_dna:
             raise ValueError('DNA was already analyzed for this CG Structure. Use overwrite_existing_dna to proceed anyway.')
 
         if trajectory is None:
             trajectory = self.u.trajectory[1:]
+
         self.dna.build_from_u(leading_strands, pairs_in_structure, len(trajectory)+1, sel, overwrite_existing_dna, movable=movable, use_full_nucleotide=use_full_nucleotide)
 
         if len(trajectory) != 0:
             self.dna.analyze_trajectory(trajectory)
+
+        self._add_nucleotides()
+
 
     def build_dna(self, sequence, movable=True):
         '''Method that runs generation of linear DNA structure with given sequence. Each pair of nucleotides and each step of pairs gains similar average BDNA parameters.
@@ -103,22 +120,38 @@ class CG_Structure:
 
     def save_to_h5(self, file, **dataset_kwards):
         self.dna.save_to_h5(file, **dataset_kwards)
-        for i, protein in enumerate(self.proteins):
-            protein.save_to_h5(file, group_name=f'protein_{i}_CG_parameters', **dataset_kwards)
+        for i, protein in enumerate(self.rlsp_groups):
+            protein.save_to_h5(file, group_name=f'rlspg_{i}_CG_parameters', **dataset_kwards)
+
+    def load_symmetrical_nucleosome(self):
+        self.load_from_h5(h5py.File(files('pynamod').joinpath(f'structures/nucleosome_sym.h5')))
+        return self
 
     def load_from_h5(self, file):
         self.dna.load_from_h5(file)
-        i = 0
-        while True:
+        for i in range(len(file)-1):
+            group_name = f'rlspg_{i}_CG_parameters'
             try:
+                t = file[group_name]
+            except KeyError as ker:
+                name = str(ker)[46:51]
+                if name != 'rlspg':
+                    raise ker
+                group_name = 'protein' + group_name[5:]
+                
+            if file[group_name]['supdata'][0] > 6:
                 protein = Protein()
-                ref_ind = protein.load_from_h5(file, group_name=f'protein_{i}_CG_parameters')
+                ref_ind = protein.load_from_h5(file, group_name=group_name)
                 protein.ref_pair = self.dna.pairs_list[ref_ind]
                 protein.cg_structure = self
+                self.rlsp_groups.append(protein)
                 self.proteins.append(protein)
-                i += 1
-            except KeyError:
-                break
+            else:
+                rlsp = Real_Space_Beads_Groups()
+                ref_ind = rlsp.load_from_h5(file, group_name=group_name)
+                rlsp.ref_pair = self.dna.pairs_list[ref_ind]
+                rlsp.cg_structure = self
+                self.rlsp_groups.append(rlsp)
 
         return self
 
@@ -143,11 +176,15 @@ class CG_Structure:
         if binded_dna_len is None:
             binded_dna_len = len(self.dna.pairs_list)
 
-        new = Protein(protein_u, n_cg_beads=n_cg_beads, ref_pair=self.dna.pairs_list[ref_index], binded_dna_len=binded_dna_len)
+        new = Protein(mdaUniverse = protein_u, n_cg_beads=n_cg_beads,
+                      ref_pair=self.dna.pairs_list[ref_index], binded_dna_len=binded_dna_len)
         new.cg_structure = self
         new.build_model(self.dna)
         self.proteins.append(new)
+        self.rlsp_groups.append(new)
         self.proteins = sorted(self.proteins, key=lambda p: p.ref_pair.ind)
+        self.rlsp_groups = sorted(self.rlsp_groups, key=lambda p: p.ref_pair.ind)
+
 
     def get_cg_mda_traj(self, allign_sel='all'):
         '''Method that creates trajectory of CG model as a mda Universe.
@@ -157,34 +194,43 @@ class CG_Structure:
             **allign_sel** - selection for mda Universe. Atoms in this selection will be used to allign model in all frames.
             '''
 
-        n_parts = sum([protein.n_cg_beads for protein in self.proteins])
+        n_parts = sum([group.n_cg_beads for group in self.rlsp_groups])
+        n_proteins = sum([protein.n_cg_beads for protein in self.proteins])
 
-        segids = [item for i, protein in enumerate(self.proteins) for item in [i]*protein.n_cg_beads]
-        resnames = ['prot']*n_parts
+        segids = []
+        resnames = []
+        segid_ind = 1
+        for group in self.rlsp_groups:
+            if group.n_cg_beads > 6:
+                resnames += ['prot']*group.n_cg_beads
+                segids += [segid_ind]*group.n_cg_beads
+                segid_ind += 1
+            else:
+                resnames += ['dna']*group.n_cg_beads
+                segids += [0]*group.n_cg_beads
+
         resids = np.arange(n_parts)
         coords = []
         for ts in self.dna.trajectory:
-            frame_coord = self.dna.origins.reshape(1, -1, 3).detach().clone()
-            if self.proteins:
-                frame_coord = torch.vstack([protein.origins for protein in self.proteins]).reshape(1, -1, 3)
+            frame_coord = torch.tensor(self.origins.reshape(1,-1,3))
             coords.append(frame_coord)
         coords = torch.cat(coords).numpy()
-        n_frames = coords.shape[0]
         segid_names = ['D'] + [f'P{i}' for i in range(len(self.proteins))]
+
         u = mda.Universe.empty(n_parts, n_residues=n_parts, n_segments=len(segid_names),
                                atom_resindex=np.arange(n_parts),
                                residue_segindex=segids,
                                trajectory=True)
+
         u.add_TopologyAttr('name', resnames)
         u.add_TopologyAttr('resname', resnames)
         u.add_TopologyAttr('resid', resids)
         u.add_TopologyAttr('segid', segid_names)
         u.add_TopologyAttr('charge', self.charges)
         u.add_TopologyAttr('radius', self.radii)
-        # AlignTraj matches atoms by mass; empty universes lack masses by default.
-        u.add_TopologyAttr('masses', self.masses.detach().cpu().numpy().astype(np.float64))
         u.load_new(coords, format=MemoryReader)
-        alignment = align.AlignTraj(u, u, in_memory=True, select=allign_sel)
+        alignment = align.AlignTraj(u, u,in_memory=True, select=allign_sel)
+
         alignment.run()
         return u
 
@@ -211,6 +257,7 @@ class CG_Structure:
                                    label='charge',
                                    ticks=[-max_charge, 0, max_charge])
 
+
         colors = np.array([cb.cmap(norm(c))[:3] for c in self.charges]).flatten().tolist()
         view.shape.add_buffer('sphere', position=self.origins.flatten().tolist(),
                               color=colors, radius=self.radii.tolist())
@@ -229,12 +276,13 @@ class CG_Structure:
         '''
         structures = [structure.copy() for structure in structures]
         self.proteins += [protein for structure in structures for protein in structure.proteins]
+        self.rlsp_groups += [group for structure in structures for group in structure.rlsp_groups]
         update_value = len(self.dna.pairs_list)
         self.dna.append_structures([structure.dna for structure in structures], copy=False)
         for structure in structures:
-            for protein in structure.proteins:
-                protein.cg_structure = self
-                protein.ref_pair = self.dna.pairs_list[protein.ref_pair.ind+update_value]
+            for group in structure.rlsp_groups:
+                group.cg_structure = self
+                group.ref_pair = self.dna.pairs_list[group.ref_pair.ind+update_value]
             update_value += len(structure.dna.pairs_list)
 
         return self
@@ -244,18 +292,16 @@ class CG_Structure:
         '''
         new = CG_Structure(mdaUniverse=self.u)
         new.dna = self.dna.copy()
-        new.proteins = []
-        for protein in self.proteins:
-            new.proteins.append(protein.copy())
-            ind = new.proteins[-1].ref_pair.ind
-            new.proteins[-1].ref_pair = new.dna.pairs_list[ind]
+        new.rlsp_groups = []
+        for rlsp in self.rlsp_groups:
+            rlsp = rlsp.copy()
+            new.rlsp_groups.append(rlsp)
+            ind = new.rlsp_groups[-1].ref_pair.ind
+            new.rlsp_groups[-1].ref_pair = new.dna.pairs_list[ind]
+            rlsp.cg_structure = new
+            if rlsp.n_cg_beads > 6:
+                new.proteins.append(rlsp)
         return new
-
-    def get_proteins_attr(self, attr):
-        if self.proteins:
-            return torch.cat([getattr(protein, attr) for protein in self.proteins])
-        else:
-            return torch.empty(0)
 
     def to(self, device):
         '''Method to send all tensors that are stored in related classes to a given device.
@@ -264,79 +310,58 @@ class CG_Structure:
 
             **device** - could be 'cuda' or 'cpu' - device to send tensors to.
             '''
-        self.all_coords.to(device)
         self.dna.to(device)
-        for protein in self.proteins:
-            protein.to(device)
+        for group in self.rlsp_groups:
+            group.to(device)
 
-    def _add_nucleotides(self, model_type='1spnp'):
+    def _add_nucleotides(self):
+
         '''Supported models:
-        - 1spnp
+        - 1spbp
         - 1spn
+        - 3spn
         '''
-        nucl_masses = {
-            'A': 346.2212,
-            'T': 321.2085,
-            'C': 322.198,
-            'G': 362.223
-        }
+        nucleotide_creator = Nucleotide_Creator(self.nucleotides_model)
+
         for pair in self.dna.pairs_list:
-            if model_type == '1spn':
+            ind = pair.ind
+            pair_beads = nucleotide_creator.create(pair, self.dna.origins[ind], self.dna.ref_frames[ind])
+            pair_beads.cg_structure = self
+            self.rlsp_groups.append(pair_beads)
 
-                lead_nucl_u = pair.lead_nucl.res_atoms
-                lag_nucl_u = pair.lag_nucl.res_atoms
-
-                radii = torch.tensor([lead_nucl_u.radius_of_gyration(), lag_nucl_u.radius_of_gyration()])
-                charges = torch.tensor([-1, -1])
-                origins = torch.from_numpy(np.vstack([lead_nucl_u.center_of_mass(), lag_nucl_u.center_of_mass()]).reshape(-1, 1, 3))
-                masses = torch.tensor([lead_nucl_u.masses.sum(), lag_nucl_u.masses.sum()])
-                ind = pair.ind
-                ref_vectors = torch.matmul((origins - self.dna.origins[ind]), self.dna.ref_frames[ind])
-
-                self.proteins.append(Protein(n_cg_beads=2, ref_pair=pair, ref_vectors=ref_vectors, charges=charges, masses=masses, radii=radii, cg_structure=self, binded_dna_len=1))
-            elif model_type == '1spnp':
-                radii = torch.tensor([10])
-                charges = torch.tensor([-2])
-                origins = self.dna.origins[pair.ind]
-
-                masses = torch.tensor([nucl_masses[pair.lead_nucl.restype] + nucl_masses[pair.lag_nucl.restype]])
-                ind = pair.ind
-                ref_vectors = torch.zeros(3)
-
-                self.proteins.append(Protein(n_cg_beads=1, ref_pair=pair, ref_vectors=ref_vectors, charges=charges, masses=masses, radii=radii, cg_structure=self, binded_dna_len=1))
-
-        self.proteins = sorted(self.proteins, key=lambda p: p.ref_pair.ind)
+        self.rlsp_groups = sorted(self.rlsp_groups, key=lambda p: p.ref_pair.ind)
 
     def __getitem__(self, sl):
         it = self.copy()
         it.dna.__getitem__(sl)
-        proteins = []
-        for protein in it.proteins:
-            if protein.ref_pair in it.dna.pairs_list:
-                proteins.append(protein)
+        rlsp_groups = []
+        for group in it.rlsp_groups:
+            if group.ref_pair in it.dna.pairs_list:
+                rlsp_groups.append(group)
                 if sl.step < 0:
-                    protein.ref_vectors *= -1
+                    group.ref_vectors *= -1
 
-        it.proteins = proteins
+        it.rlsp_groups = rlsp_groups
+
 
         return it
 
     @property
     def origins(self):
-        return torch.vstack([protein.origins for protein in self.proteins])
+        if 'rlsp_origins' in self.dna.trajectory.attrs_names:
+            return torch.tensor(self.dna.trajectory.rlsp_origins)
+        else:
+            return torch.vstack([group.origins for group in self.rlsp_groups])
 
     @property
     def radii(self):
-        return torch.cat([protein.radii for protein in self.proteins])
+        return torch.cat([group.radii for group in self.rlsp_groups])
 
     @property
     def eps(self):
-        return torch.cat([protein.eps for protein in self.proteins])
+        return torch.cat([group.eps for group in self.rlsp_groups])
 
     @property
     def charges(self):
-        return torch.cat([protein.charges for protein in self.proteins])
+        return torch.cat([group.charges for group in self.rlsp_groups])
 
-    @property
-    def masses(self):
-        return torch.cat([protein.masses for protein in self.proteins])

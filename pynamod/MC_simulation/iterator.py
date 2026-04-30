@@ -28,7 +28,7 @@ class Iterator:
 
         while self.total_step < max_steps and self.accepted_steps < target_accepted_steps:
 
-            self._integration_step(save_every, integration_mod)
+            self._integration_step(save_every, integration_mode)
 
             self._stats_display.show_step_data(self.accepted_steps, self.total_step, self.prev_e.sum().item())
             # Stop only when a step is completed in case of keyboard interrupt.
@@ -42,8 +42,17 @@ class Iterator:
         self.trajectory.to(device)
         self.energy.to(device)
         self._rotation_handler.to(device)
+        for group in self.cg_structure.rlsp_groups:
+            group.ref_vectors = group.ref_vectors.to(device)
 
-    def _prepare_system(self, target_accepted_steps, transfer_to_memory_every, device, integration_mod, traj_init_step, KT_factor):
+    def _prepare_system(self, target_accepted_steps, transfer_to_memory_every, rebuild_every,
+                        device, integration_mode, traj_init_step, KT_factor, dtype, debug):
+        if rebuild_every is None:
+            rebuild_every = target_accepted_steps
+        self.rebuild_every = rebuild_every
+        if debug:
+            self.dif_cutoff = 10 ** -6
+        self.debug = debug
         if not transfer_to_memory_every:
             transfer_to_memory_every = target_accepted_steps
         self.transfer_to_memory_every = transfer_to_memory_every
@@ -63,11 +72,12 @@ class Iterator:
 
         self.res_trajectory.cur_step = cur_step
 
-        self._set_change_indices(integration_mod)
+        self._set_change_indices(integration_mode)
 
         self._scaled_KT = KT_factor*self.energy.KT
 
-    def _set_change_indices(self, integration_mod):
+    def _set_change_indices(self, integration_mode):
+
         self.movable_ind = torch.arange(self.trajectory.data_len, dtype=int)[self.cg_structure.dna.movable_steps]
         if self.movable_ind.shape[0] > 0 and self.movable_ind[0] == 0:
             self.movable_ind = self.movable_ind[1:]
@@ -75,47 +85,42 @@ class Iterator:
             raise ValueError('No movable DNA steps available for MC simulation. Set cg_structure.dna.movable_steps[1:] = True or build/analyze DNA with movable=True.')
         if integration_mod == 'minimize':
             self.cur_movable_ind = 0
-        elif integration_mod == 'random_step':
+        elif integration_mode == 'random_step':
             self.movable_ind_len = self.movable_ind.shape[0]
 
-    def _create_tens_trajectory(self):
-        init_local_params = self.cg_structure.dna.geom_params.local_params
-        init_ref_frames = self.cg_structure.dna.geom_params.ref_frames
-        init_ori = self.cg_structure.dna.geom_params.origins
-
-        if self.cg_structure.proteins:
-            init_prot_ori = torch.vstack([
-                p.origins.detach().clone() if isinstance(p.origins, torch.Tensor) else torch.as_tensor(p.origins)
-                for p in self.cg_structure.proteins
-            ])
-        else:
-            init_prot_ori = torch.empty((0, 1, 3))
+    def _create_tens_trajectory(self, dtype):
+        init_local_params = self.cg_structure.dna.geom_params.local_params.to(dtype)
+        init_ref_frames = self.cg_structure.dna.geom_params.ref_frames.to(dtype)
+        init_ori = self.cg_structure.dna.geom_params.origins.to(dtype)
+        init_rlsp_ori = self.cg_structure.origins.to(dtype)
 
         ln = init_ref_frames.shape[0]
-        traj_len = self.transfer_to_memory_every+1
+        traj_len = self.transfer_to_memory_every + 1
         dtype = init_ref_frames.dtype
-        prot_origins_ln = init_prot_ori.shape[0]
 
         self.trajectory = Tensor_Trajectory(dtype, traj_len, ln, torch.tensor, attrs_names=['prot_origins'], shapes=[(traj_len, init_prot_ori.shape[0], 1, 3)])
         self.trajectory.origins, self.trajectory.ref_frames = init_ori, init_ref_frames
         self.trajectory.local_params = init_local_params
-        self.trajectory.prot_origins = init_prot_ori
+        self.trajectory.rlsp_origins = init_rlsp_ori
 
-    def _integration_step(self, save_every, integration_mod):
+    def _integration_step(self, save_every, integration_mode):
 
-        change_indices = self._get_cur_change_index(integration_mod)
+        change_indices = self._get_cur_change_index(integration_mode)
         self._rotation_handler.apply_rotation(change_indices, self.trajectory)
 
         e_dif_components, e_mat, s_mat = self.energy.get_energy_dif(self._rotation_handler, change_indices[1], self.prev_e)
-
         e_dif_components = torch.stack(e_dif_components)
-        cur_e = torch.stack(self.energy.get_energy_components(self._rotation_handler, save_matr=False))
-        # d = ((cur_e - self.prev_e)[1:3] - e_dif_components[1:3])
-        # if abs(d[0]) > 10**-4 or abs(d[1]) > 10**-4:
-        #     print(d)
+        if self.debug:
+            cur_e = torch.stack(self.energy.get_energy_components(self._rotation_handler, save_matr=False))
+            energy_error = ((cur_e - self.prev_e) - e_dif_components)
+            if sum(abs(energy_error) > 0.01) > 0:
+                print(f'Energy difference error is {energy_error}')
+            pos_dif = self._rotation_handler.compare()
+            if pos_dif[0] > self.dif_cutoff or pos_dif[1] > self.dif_cutoff:
+                print(f'Origins error has reached {pos_dif[0]:6f} and ref_frames error has reached {pos_dif[1]:6f} at accepted step {self.accepted_steps}')
+                self.dif_cutoff *= 10
 
         Del_E = e_dif_components.sum()
-
         r = torch.rand(1).item()
         self.total_step += 1
 
@@ -123,6 +128,21 @@ class Iterator:
             self.energy.update_matrices(e_mat, s_mat, change_indices[1])
             self.prev_e += e_dif_components
             self.accepted_steps += 1
+
+            if self.accepted_steps % self.rebuild_every == 0:
+                self._rotation_handler.len = self._rotation_handler.origins.shape[0]
+                self._rotation_handler.rebuild_ref_frames_and_ori(
+                    start_ref_frame=self._rotation_handler.ref_frames[0],
+                    start_origin=self._rotation_handler.origins[0])
+
+                rlsp_origins = []
+                for rlsp_group in self.cg_structure.rlsp_groups:
+                    ref_ind = rlsp_group.ref_pair.ind
+                    ref_r = self._rotation_handler.ref_frames[ref_ind]
+                    ref_ori = self._rotation_handler.origins[ref_ind]
+                    rlsp_origins.append(rlsp_group.get_true_pos(ref_om=ref_ori, ref_Rm=ref_r))
+
+                self.rlsp_origins = torch.vstack(rlsp_origins)
 
             self._rotation_handler.set_new_traj_params(self.trajectory)
 
@@ -140,8 +160,8 @@ class Iterator:
     def _signal_handler(self, signum, frame):
         self._stop_loop = True
 
-    def _get_cur_change_index(self, integration_mod):
-        if integration_mod == 'minimize':
+    def _get_cur_change_index(self, integration_mode):
+        if integration_mode == 'minimize':
             cur_index = self.cur_movable_ind
             self.cur_movable_ind += 1
             if self.cur_movable_ind == self.movable_ind.shape[0]:
@@ -161,6 +181,7 @@ class Iterator:
         origins_traj = self.trajectory.origins_traj[:steps, :dna_len].numpy(force=True)
         ref_frames_traj = self.trajectory.ref_frames_traj[:steps].numpy(force=True)
         local_params_traj = self.trajectory.local_params_traj[:steps].numpy(force=True)
+        rlsp_origins_traj = self.trajectory.rlsp_origins_traj[:steps].numpy(force=True)
         energy_comp_traj = self.energy_comp_traj[:steps].numpy(force=True)
 
         for i in range(steps):

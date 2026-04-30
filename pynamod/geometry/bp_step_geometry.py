@@ -1,19 +1,20 @@
 import torch
-from scipy.spatial.transform import Rotation as R
 
 
 class Geometry_Functions:
     '''This class contains functions to rebuild reference frames and ori from local DNA parameters for full strucuture or partially with rotation and to rebuild local parameters from reference frames amd origins. This class is supposed to be used as a super class for Geometrical_Parameters.'''
 
-    def rebuild_ref_frames_and_ori(self, start_index=0, stop_index=None, start_ref_frame=None, start_origin=None):
+    def rebuild_ref_frames_and_ori(self, start_index=0, stop_index=None,
+                                   start_ref_frame=None, start_origin=None):
         if stop_index is None:
             stop_index = self.len
 
-        dist_params = self.local_params[start_index + 1:stop_index, :3]
-        angle_params = torch.deg2rad(self.local_params[start_index + 1:stop_index, 3:])
 
-        gamma = torch.norm(angle_params[:, :2], dim=1)
-        cos_phi = angle_params[:, 1]/gamma
+        dist_params = self.local_params[start_index + 1:stop_index,:3]
+        angle_params = torch.deg2rad(self.local_params[start_index + 1:stop_index,3:])
+
+        gamma = torch.norm(angle_params[:,:2],dim=1)
+        cos_phi =  angle_params[:,1]/gamma
         phi = torch.arccos(cos_phi)
         phi[angle_params[:, 0] < 0] *= -1
 
@@ -45,8 +46,9 @@ class Geometry_Functions:
         if self.pair_params:
             sl = (z1 * z2).sum(dim=1) < 0
             R1 = R1.clone()
-            R1[sl, :, 1:] *= -1
-            z1 = R1[:, :, 2]
+            R1[sl,:,1:] *= -1
+            z1 = R1[:,:,2]
+
 
         o1, o2 = self.origins[start_index:-1], self.origins[start_index + 1:]
 
@@ -91,28 +93,29 @@ class Geometry_Functions:
         phi_sign = (torch.linalg.cross(hinge, self.Rm[:, :, 1])*self.Rm[:, :, 2]).sum(dim=1)
         phi[phi_sign < 0] *= -1
 
-        self.local_params[start_index + 1:, 3] = torch.rad2deg(RollTilt*phi.sin())
-        self.local_params[start_index + 1:, 4] = torch.rad2deg(RollTilt*phi.cos())
+        self.local_params[start_index + 1:,3] = torch.rad2deg(RollTilt*phi.sin())
+        self.local_params[start_index + 1:,4] = torch.rad2deg(RollTilt*phi.cos())
 
-    def rotate_ref_frames_and_ori(self, dna_change_index, prot_change_index=None):
+    def rotate_ref_frames_and_ori(self, dna_change_index, rlsp_change_index=None):
         prev_R = self.ref_frames[dna_change_index].clone()
         prev_o = self.origins[dna_change_index].clone()
-        self.rebuild_ref_frames_and_ori(dna_change_index-1, dna_change_index+1, self.ref_frames[dna_change_index-1], self.origins[dna_change_index-1])
+        self.rebuild_ref_frames_and_ori(dna_change_index-1, dna_change_index+1,
+                                        self.ref_frames[dna_change_index-1], self.origins[dna_change_index-1])
         if dna_change_index != self.origins.shape[0]:
             rot_matrix = self.ref_frames[dna_change_index].mm(prev_R.T)
             self._rotate_R(dna_change_index, rot_matrix)
-            self._transform_ori(dna_change_index, prot_change_index, rot_matrix, prev_o, self.origins[dna_change_index])
+            self._transform_ori(dna_change_index, rlsp_change_index, rot_matrix, prev_o, self.origins[dna_change_index])
 
     def _rotate_R(self, change_index, rot_matrix):
-        self.ref_frames[change_index+1:] = rot_matrix.reshape(1, 3, 3).matmul(self.ref_frames[change_index+1:])
+        self.ref_frames[change_index+1:] = rot_matrix.reshape(1,3,3).matmul(self.ref_frames[change_index+1:])
         self._qr_decomp(self.ref_frames[change_index+1:])
 
-    def _transform_ori(self, dna_change_index, prot_change_index, rot_matrix, prev_ori, changed_ori):
+    def _transform_ori(self, dna_change_index, rlsp_change_index, rot_matrix, prev_ori, changed_ori):
         self.origins[dna_change_index+1:] -= prev_ori
         self.origins[dna_change_index+1:] = self.origins[dna_change_index+1:].matmul(rot_matrix.T) + changed_ori
-        if prot_change_index:
-            self.prot_origins[prot_change_index:] -= prev_ori
-            self.prot_origins[prot_change_index:] = self.prot_origins[prot_change_index:].matmul(rot_matrix.T) + changed_ori
+        if rlsp_change_index:
+            self.rlsp_origins[rlsp_change_index:] -= prev_ori
+            self.rlsp_origins[rlsp_change_index:] = self.rlsp_origins[rlsp_change_index:].matmul(rot_matrix.T) + changed_ori
 
     def _qr_decomp(self, r):
         r[:, :, 0] /= r[:, :, 0].norm(dim=1, keepdim=True)

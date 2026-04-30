@@ -1,10 +1,9 @@
-import nglview as nv
-import numpy as np
 import pandas as pd
+import numpy as np
 import torch
+import io
 from Bio.Seq import Seq
 from tqdm.auto import tqdm
-
 from pynamod.atomic_analysis.nucleotides_parser import (Nucleotide,
                                                         get_all_nucleotides,
                                                         get_base_ref_frame)
@@ -17,16 +16,19 @@ from pynamod.geometry.tensor_subclasses import mod_Tensor
 from pynamod.geometry.trajectories import H5_Trajectory, Tensor_Trajectory
 
 
+
 class DNA_Structure:
     '''Class that stores information about DNA, pairs in it. Geometrical parameters in this class are links to the other class (All_Coords) that manages them.
 
         Main attributes of this class are:
 
+
         - **pairs_list** - list of Pair class objects.
-        - **origins**, **ref_frames**, **step_params** - properties that return tensors from All_Coords class with parameters for this DNA structure.'''
+        - **origins**, **ref_frames**, **step_params** - properties that return tensors  with parameters for this DNA structure.'''
 
     def __init__(self, **kwards):
         self.pairs_list = []
+
         self.movable_steps = torch.empty(0, dtype=bool)
         for name, value in kwards.items():
             setattr(self, name, value)
@@ -67,8 +69,8 @@ class DNA_Structure:
         rev_sequence = Seq(sequence).reverse_complement()
         ln = len(sequence)
 
-        self.nucleotides = Nucleotides_Storage(Nucleotide, None)
-        self.nucleotides.restypes = list(sequence+rev_sequence)
+        self.nucleotides = Nucleotides_Storage(Nucleotide,None)
+        self.nucleotides.restypes = list(sequence+rev_sequence[::-1])
         self.nucleotides.resids = list(range(ln))*2
         self.nucleotides.segids = ['A']*ln + ['B']*ln
         self.nucleotides.leading_strands = [True]*ln + [False]*ln
@@ -78,7 +80,18 @@ class DNA_Structure:
         self.nucleotides.e_residues = [None]*(ln*2)
         self.nucleotides.base_pairs = [None]*(ln*2)
 
-        self.pairs_list = Pairs_Storage(Base_Pair, self.nucleotides)
+        # nucl_str_dict = {}
+        # for base in ['A', 'T', 'G', 'C', 'U']:
+        #     nucl_str_dict[base] = get_base_u(base)
+        # self.nucleotides.res_atoms = []
+        # for restype, ref_frame, origin in zip(self.nucleotides.restypes,self.nucleotides.ref_frames,self.nucleotides.origins):
+        #     res_atoms = nucl_str_dict[restype].copy()
+        #     st_positions = torch.from_numpy(res_atoms.atoms.positions).reshape(-1,1,3).to(torch.double)
+        #     res_atoms.atoms.positions = torch.matmul(st_positions,ref_frame.T) + origin
+        #     self.nucleotides.res_atomss.append(res_atos)
+
+        self.pairs_list = Pairs_Storage(Base_Pair,self.nucleotides)
+
         self.pairs_list.lead_nucl_inds = list(range(ln))
         self.pairs_list.lag_nucl_inds = [i+ln for i in range(ln)]
         self.pairs_list.radii = [radius]*ln
@@ -121,6 +134,7 @@ class DNA_Structure:
 
         self.geom_params.trajectory.cur_step = 0
 
+
     def append_structures(self, structures, first_step_params=torch.from_numpy(BDNA_step[6:]), copy=True):
         '''Is called by CG_Structure.append_structures and combines provided DNA structures.
 
@@ -159,10 +173,14 @@ class DNA_Structure:
 
         return self
 
-    def transfer_trajectory_to_h5(self, filename, mode='r+', keep_old_frames=True, **datasets_kwards):
+    def transfer_trajectory_to_h5(self,filename,mode='r+',keep_single_old_frame=None,**datasets_kwards):
         old_traj = self.geom_params.trajectory
-        self.geom_params.trajectory = H5_Trajectory(filename, len(self.pairs_list), mode=mode, **datasets_kwards)
-        if mode != 'r':
+        self.geom_params.trajectory = H5_Trajectory(filename, len(self.pairs_list),mode=mode,**datasets_kwards)
+        if keep_single_old_frame is not None:
+            old_traj.cur_step = keep_single_old_frame
+            for attr in self.geom_params.trajectory.attrs_names:
+                setattr(self.geom_params.trajectory,attr,getattr(old_traj,attr))
+        elif mode != 'r' and mode != 'r+':
             self.geom_params.trajectory.extend(old_traj)
         if isinstance(old_traj, H5_Trajectory):
             old_traj.file.close()
@@ -193,6 +211,7 @@ class DNA_Structure:
             Returns:
 
             pandas.DataFrame object'''
+
         pairs_data = [(pair.lead_nucl.resid, pair.lead_nucl.segid, pair.lead_nucl.restype,
                        pair.lag_nucl.restype, pair.lag_nucl.segid, pair.lag_nucl.resid) for pair in self.pairs_list]
         labels = ['resid1', 'segid1', 'restype1', 'restype2', 'segid2', 'resid2']
@@ -218,6 +237,7 @@ class DNA_Structure:
         new.geom_params = self.geom_params.copy()
         new.pairs_list = self.pairs_list.copy()
         new.nucleotides = self.nucleotides.copy()
+
 
         return new
 
@@ -303,11 +323,12 @@ class DNA_Structure:
     def __repr__(self):
         return f'<DNA structure with {len(self.pairs_list)} nucleotide pairs>'
 
+
     def __getitem__(self, sl):
-        ''''''
         attrs = self.__dict__.copy()
         for attr in ('pairs_list', 'geom_params'):
             attrs[attr] = getattr(self, attr)[sl]
+
 
         for attr in ('radii', 'eps', 'charges'):
             if sl.step < 0:
@@ -315,6 +336,7 @@ class DNA_Structure:
                 new_sl = slice(sl.start, sl.stop, -1*sl.step)
                 attrs[attr] = it[new_sl]
             else:
+
                 attrs[attr] = getattr(self, attr)[sl]
 
         return DNA_Structure(**attrs)

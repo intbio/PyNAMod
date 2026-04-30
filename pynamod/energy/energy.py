@@ -1,5 +1,4 @@
 import torch
-from scipy.spatial.distance import cdist, squareform
 
 from pynamod.energy.elastic_energy import _Elastic_Energy_Calculator
 from pynamod.energy.energy_constants import *
@@ -11,7 +10,6 @@ class Energy:
     '''
     This class creates force matrices for a given CG structure and calculates its energy.
       '''
-
     def __init__(self, K_free=1, K_elec=1, K_bend=1, KT=300*8.314, salt_c=150, water_epsr=81, include_elst=True):
 
         # Setting energy constants
@@ -37,7 +35,7 @@ class Energy:
         self.KT = KT/10**kiloj_order
         self.restraints = []
 
-    def set_energy_matrices(self, CG_structure, ignore_neighbors=5, ignore_protein_neigbors=5, set_dist_mat_sl=True):
+    def set_energy_matrices(self, CG_structure, ignore_neighbors=5, set_dist_mat_sl=True):
         '''Creates matrices for energy calculation.
 
             Attributes:
@@ -47,11 +45,11 @@ class Energy:
             **ignore_neighbors** - number of neigboring dna pairs (in both sides) interactions with which are ignored in real space. Deafult 5.
             '''
         self._elastic_e_calc.set_energy_matrices(CG_structure)
-        self._real_space_calc.set_energy_matrices(CG_structure, ignore_neighbors, ignore_protein_neigbors, set_dist_mat_sl)
+        self._real_space_calc.set_energy_matrices(CG_structure,ignore_neighbors,set_dist_mat_sl)
 
     def add_restraints(self, restraints=None, restraint_type=None, CG_structure=None, scaling_factor=1):
         '''
-        Attributes:
+        Attributes: 
 
         **restraints** - list of restraint objects.
 
@@ -60,6 +58,7 @@ class Energy:
         if isinstance(restraints, list):
             self.restraints += restraints
         if restraint_type == 'circular_with_linear_restraint':
+
             self._get_circular_restraint('linear', CG_structure, scaling_factor)
         elif restraint_type == 'circular_with_elastic_restraint':
             self._get_circular_restraint('elastic', CG_structure, scaling_factor)
@@ -74,7 +73,8 @@ class Energy:
     def get_energy_components(self, params_storage, save_matr=True):
         elastic = self._elastic_e_calc.get_energy(params_storage.local_params)
 
-        electrostatic, spatial = self._real_space_calc.get_energy(params_storage.origins, params_storage.prot_origins, save_matr=save_matr)
+        electrostatic, spatial = self._real_space_calc.get_energy(params_storage.origins,params_storage.rlsp_origins,save_matr=save_matr)
+
         restraint = self._get_restraint_energy(params_storage)
         return elastic, electrostatic, spatial, restraint
 
@@ -82,14 +82,15 @@ class Energy:
         if self.restraints:
             return sum([restraint.get_restraint_energy(all_coords) for restraint in self.restraints])
         else:
-            return torch.tensor(0, dtype=torch.double, device=self._real_space_calc.radii_sum_prod[0].device)
+            return torch.tensor(0,dtype=torch.double,device=self._real_space_calc.radii_sum_prod[0].device)    
 
-    def update_matrices(self, e_mat, s_mat, prot_change_index):
-        self._real_space_calc.update_matrices(e_mat, s_mat, prot_change_index)
+    def update_matrices(self, e_mat, s_mat, rlsp_change_index):
+        self._real_space_calc.update_matrices(e_mat,s_mat,rlsp_change_index)
 
-    def get_energy_dif(self, params_storage, prot_change_index, prev_e):
+    def get_energy_dif(self, params_storage, rlsp_change_index, prev_e):
 
-        del_electrostatic, del_spatial, e_mat, s_mat = self._real_space_calc.get_energy_dif(params_storage.prot_origins, prot_change_index)
+        del_electrostatic, del_spatial, e_mat, s_mat = self._real_space_calc.get_energy_dif(params_storage.rlsp_origins,rlsp_change_index)
+
 
         elastic1 = prev_e[0]
         restraint1 = prev_e[3]

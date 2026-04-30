@@ -21,13 +21,25 @@ class _Rotation_Handler(Geometry_Functions):
         self.ref_frames = trajectory.ref_frames.clone()
         self.local_params = trajectory.local_params.clone()
         self.origins = trajectory.origins.clone()
-        self.prot_origins = trajectory.prot_origins.clone()
-        self.local_params[change_indices[0]] += torch.normal(mean=self.normal_mean, std=self.normal_scale, out=self.change)
+        self.rlsp_origins = trajectory.rlsp_origins.clone()
+        self.local_params[change_indices[0]] += torch.normal(mean=self.normal_mean,std=self.normal_scale,out=self.change)
 
         self.rotate_ref_frames_and_ori(*change_indices)
 
+    def compare(self):
+        new = _Rotation_Handler(1, 1)
+        new.local_params = self.local_params.clone()
+        new.origins = self.origins.clone()
+        new.ref_frames = self.ref_frames.clone()
+        new.len = new.ref_frames.shape[0]
+        new.rebuild_ref_frames_and_ori(start_ref_frame=self.ref_frames[0],
+                                       start_origin=self.origins[0])
+        return ((new.origins-self.origins).abs().max(),(new.ref_frames-self.ref_frames).abs().max())
+
     def set_new_traj_params(self, trajectory):
+
         trajectory.origins = self.origins
         trajectory.ref_frames = self.ref_frames
         trajectory.local_params = self.local_params
-        trajectory.prot_origins = self.prot_origins
+        trajectory.rlsp_origins = self.rlsp_origins
+
