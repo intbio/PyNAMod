@@ -1,4 +1,4 @@
-name: pynamod2
+name: pynamod
 
 channels:
   - conda-forge

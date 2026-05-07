@@ -42,6 +42,7 @@ class DNA_Structure:
 
         if pairs_in_structure is not None:
             self.parse_pairs(pairs_in_structure)
+            print(2)
         else:
             self.pairs_list = get_pairs(self)
 

@@ -294,7 +294,13 @@ class Pairs_Storage(Structures_Storage):
 
         leading_strands = self.nucleotides_storage[getattr(self, self.get_name('lead_nucl_ind'))].leading_strands
         if sum(leading_strands) == len(leading_strands):
-            return self[leading_strands]
+            result = self[leading_strands]
+            if not isinstance(result, Pairs_Storage):
+                # Create a new Pairs_Storage with the single item
+                new_storage = Pairs_Storage(self.structure_class, self.nucleotides_storage)
+                new_storage.append(result)
+                return new_storage
+            return result
         else:
             return self[leading_strands] + self[[not i for i in leading_strands]]
 
