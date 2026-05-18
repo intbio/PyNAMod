@@ -1,4 +1,15 @@
+<<<<<<< HEAD
+import numpy as np
+import torch
+import pickle
+from itertools import combinations
+from scipy.spatial.transform import Rotation as R
+from scipy.spatial.distance import pdist
+from pynamod.geometry.geometrical_parameters import Geometrical_Parameters
+from pynamod.atomic_analysis.structures_storage import Pairs_Storage
 
+=======
+>>>>>>> 4c2722a3fcadace9ef261cd86d95e432a14f8376
 from importlib.resources import files
 from itertools import combinations
 

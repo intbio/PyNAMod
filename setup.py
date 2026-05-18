@@ -5,7 +5,7 @@ setuptools.setup(
      version="0.1",
      python_requires=">=3.11",
      packages=setuptools.find_packages(exclude=['examples']),
-     data_files=['pynamod/atomic_analysis/classifier.onnx','pynamod/tests/cg_3lz0.h5','pynamod/structures/nucleosome_sym.h5'],
+     data_files=['pynamod/atomic_analysis/classifier.pkl','pynamod/tests/cg_3lz0.h5','pynamod/structures/nucleosome_sym.h5'],
      package_data= {'pynamod':['structures/ref_3spn/*']},
      include_package_data=True,
      classifiers=[

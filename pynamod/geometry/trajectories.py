@@ -34,13 +34,28 @@ class Trajectory:
     def __iter__(self):
         self.cur_step = 0
         for i in range(len(self)):
+<<<<<<< HEAD
             if self.cur_step > len(self) - 1:
                 break
+=======
+
+>>>>>>> 4c2722a3fcadace9ef261cd86d95e432a14f8376
             yield self.cur_step
             self.cur_step += self.traj_step
 
         self.cur_step = 0
 
+<<<<<<< HEAD
+    origins = property(fset=lambda self, value: self._set_frame_attr('origins',value),
+                       fget=lambda self: self._get_frame_attr('origins'))
+    ref_frames = property(fset=lambda self, value: self._set_frame_attr('ref_frames',value),
+                          fget=lambda self: self._get_frame_attr('ref_frames'))
+    local_params = property(fset=lambda self, value: self._set_frame_attr('local_params',value),
+                            fget=lambda self: self._get_frame_attr('local_params'))
+
+    rlsp_origins = property(fset=lambda self, value: self._set_frame_attr('rlsp_origins',value),
+                       fget=lambda self: self._get_frame_attr('rlsp_origins'))
+=======
     origins = property(fset=lambda self, value: self._set_frame_attr('origins', value),
                        fget=lambda self: self._get_frame_attr('origins'))
     ref_frames = property(fset=lambda self, value: self._set_frame_attr('ref_frames', value),
@@ -49,6 +64,7 @@ class Trajectory:
                             fget=lambda self: self._get_frame_attr('local_params'))
     prot_origins = property(fset=lambda self, value: self._set_frame_attr('prot_origins', value),
                             fget=lambda self: self._get_frame_attr('prot_origins'))
+>>>>>>> 4c2722a3fcadace9ef261cd86d95e432a14f8376
 
 
 class Tensor_Trajectory(Trajectory):
@@ -74,15 +90,24 @@ class Tensor_Trajectory(Trajectory):
         if shapes:
             self.shapes += shapes
         super().__init__(attrs_names)
+<<<<<<< HEAD
         for shape,attr in zip(self.shapes,self.attrs_names):
             setattr(self,f'{attr}_traj',traj_class(torch.zeros(*shape,dtype=dtype),*traj_class_attrs))
 
 
     def copy(self,*traj_class_attrs):
+=======
+        for shape, attr in zip(self.shapes, self.attrs_names):
+            z = torch.zeros(*shape, dtype=dtype)
+            setattr(self, f'{attr}_traj', z if self._is_plain_tensor_factory(traj_class) else traj_class(z, *traj_class_attrs))
+
+    def copy(self, *traj_class_attrs):
+>>>>>>> 4c2722a3fcadace9ef261cd86d95e432a14f8376
         if not traj_class_attrs:
             traj_class_attrs = self.traj_class_attrs
         new = Tensor_Trajectory(bool, 1, 1, torch.tensor, attrs_names=self.attrs_names[3:], shapes=self.shapes[3:])
         for attr in self.attrs_names:
+<<<<<<< HEAD
             setattr(new,f'{attr}_traj',self.traj_class(self.get_attr_trajectory(attr),*traj_class_attrs))
 
         return new
@@ -91,16 +116,35 @@ class Tensor_Trajectory(Trajectory):
         for attr in self.attrs_names:
             setattr(self,f'{attr}_traj',self.traj_class(self.get_attr_trajectory(attr)).to(device))
 
+    def extend(self,other_traj=None,**values_to_extend):
+
+=======
+            setattr(new, f'{attr}_traj', self.traj_class(self.get_attr_trajectory(attr), *traj_class_attrs))
+
+        return new
+
+    def to(self, device):
+        for attr in self.attrs_names:
+            t = self.get_attr_trajectory(attr)
+            if self._is_plain_tensor_factory(self.traj_class):
+                setattr(self, f'{attr}_traj', t.to(device))
+            else:
+                setattr(self, f'{attr}_traj', self.traj_class(t, *self.traj_class_attrs).to(device))
+
     def extend(self, other_traj=None, **values_to_extend):
 
-
+>>>>>>> 4c2722a3fcadace9ef261cd86d95e432a14f8376
         for attr in self.attrs_names:
             tensor = self.get_attr_trajectory(attr)
             if other_traj:
                 value = other_traj.get_attr_trajectory(attr)
             else:
                 value = values_to_extend[attr]
+<<<<<<< HEAD
+            setattr(self,f'{attr}_traj',torch.concat([tensor,torch.tensor(value)]))
 
+    def add_attr(self,attr,shape):
+=======
             if isinstance(value, torch.Tensor):
                 tail = value
             else:
@@ -108,12 +152,19 @@ class Tensor_Trajectory(Trajectory):
             setattr(self, f'{attr}_traj', torch.concat([tensor, tail]))
 
     def add_attr(self, attr, shape):
+>>>>>>> 4c2722a3fcadace9ef261cd86d95e432a14f8376
         if attr in self.attrs:
             raise ValueError(f'Trajectory already has attribute {attr}')
 
         self.res_trajectory.attrs_names.append(attr)
         self.res_trajectory.shapes.append(shape)
 
+<<<<<<< HEAD
+        setattr(self,f'{attr}_traj',self.traj_class(torch.zeros((len(self),*shape),dtype=self.dtype),*self.traj_class_attrs))
+
+    def get_attr_trajectory(self, attr):
+        return getattr(self,attr+'_traj')
+=======
         z = torch.zeros((len(self), *shape), dtype=self.dtype)
         setattr(
             self,
@@ -123,20 +174,30 @@ class Tensor_Trajectory(Trajectory):
 
     def get_attr_trajectory(self, attr):
         return getattr(self, attr+'_traj')
+>>>>>>> 4c2722a3fcadace9ef261cd86d95e432a14f8376
 
     def _create_frame(self):
         for attr, shape in zip(self.attrs_names, self.shapes):
             attr += '_traj'
             tensor = self.get_attr_trajectory(attr)
+<<<<<<< HEAD
+            setattr(self, attr, torch.concat([tensor,torch.zeros(*shape[1:])]))   
+
+    def _get_frame_attr(self,attr,frame=None):
+=======
             setattr(self, attr, torch.concat([tensor, torch.zeros(*shape[1:])]))
 
     def _get_frame_attr(self, attr, frame=None):
+>>>>>>> 4c2722a3fcadace9ef261cd86d95e432a14f8376
         if not frame:
             frame = self.cur_step
         return self.get_attr_trajectory(attr)[frame]
 
-
+<<<<<<< HEAD
+    def _set_frame_attr(self,attr,value,frame=None):
+=======
     def _set_frame_attr(self, attr, value, frame=None):
+>>>>>>> 4c2722a3fcadace9ef261cd86d95e432a14f8376
         if not frame:
             frame = self.cur_step
         if frame >= len(self):
@@ -149,17 +210,26 @@ class Tensor_Trajectory(Trajectory):
     def __getitem__(self, sl):
 
         traj_len, data_len = self.shapes[0][:2]
-
+<<<<<<< HEAD
+        new = Tensor_Trajectory(self.dtype,traj_len,data_len,self.traj_class,*self.traj_class_attrs)
+=======
         new = Tensor_Trajectory(self.dtype, traj_len, data_len, self.traj_class, *self.traj_class_attrs)
+>>>>>>> 4c2722a3fcadace9ef261cd86d95e432a14f8376
         new.shapes = self.shapes
         new.attrs_names = self.attrs_names
 
         for attr in self.attrs_names:
+<<<<<<< HEAD
+            setattr(new,f'{attr}_traj',self.traj_class(self.get_attr_trajectory(attr)[sl],*self.traj_class_attrs))
 
+        return new
+=======
             chunk = self.get_attr_trajectory(attr)[sl]
             setattr(new, f'{attr}_traj', new._make_traj_storage(chunk))
 
         return new
+
+>>>>>>> 4c2722a3fcadace9ef261cd86d95e432a14f8376
 
 class H5_Trajectory(Trajectory):
     def __init__(self, filename, data_len, mode='r', attrs_names=None, shapes=None, string_format_val=5, **kwards):
@@ -168,16 +238,24 @@ class H5_Trajectory(Trajectory):
         else:
             self.shapes = [(data_len, 1, 3), (data_len, 3, 3), (data_len, 6)]
         super().__init__(attrs_names)
+<<<<<<< HEAD
         self.file = h5py.File(filename, mode)
         self._dataset_kwards = kwards
         self.string_format_val = string_format_val
 
         if mode in ('w','x','w-'):
+=======
+        self.file = open_h5(filename, mode)
+        self._dataset_kwards = kwards
+        self.string_format_val = string_format_val
+        if mode in ('w', 'x', 'w-'):
+>>>>>>> 4c2722a3fcadace9ef261cd86d95e432a14f8376
             self._last_frame_ind = -1
 
         elif mode == 'r':
             self._last_frame_ind = len(self.file) - 1
 
+<<<<<<< HEAD
         elif mode in ('r+','a'):
             self._last_frame_ind = self.cur_step = len(self.file) - 1
 
@@ -187,6 +265,11 @@ class H5_Trajectory(Trajectory):
                     self.attrs_names += [str(k)]
                     self.shapes += self.file[str(self._last_frame_ind).zfill(self.string_format_val)][str(k)][:].shape
 
+    def extend(self,other_traj=None,**values_to_extend):
+=======
+        elif mode in ('r+', 'a'):
+            self._last_frame_ind = self.cur_step = len(self.file) - 1
+
     def _empty_dataset_kwargs(self):
         # h5py: creating dataset with only shape requires explicit dtype (default was float32 / 'f4').
         kw = dict(self._dataset_kwards)
@@ -195,13 +278,17 @@ class H5_Trajectory(Trajectory):
         return kw
 
     def extend(self, other_traj=None, **values_to_extend):
+>>>>>>> 4c2722a3fcadace9ef261cd86d95e432a14f8376
         if other_traj:
             for step in other_traj:
                 attrs = {}
                 for attr in self.attrs_names:
                     attrs[attr] = other_traj._get_frame_attr(attr)
-
+<<<<<<< HEAD
+                self.add_frame(self._last_frame_ind+1,**attrs)
+=======
                 self.add_frame(self._last_frame_ind+1, **attrs)
+>>>>>>> 4c2722a3fcadace9ef261cd86d95e432a14f8376
 
         else:
             for i in range(values_to_extend['origins_traj'].shape[0]):
@@ -209,10 +296,15 @@ class H5_Trajectory(Trajectory):
                 for attr in self.attrs_names:
                     attrs[attr] = values_to_extend[attr+'_traj']
 
+<<<<<<< HEAD
+                self.add_frame(self._last_frame_ind+1,**attrs)
 
+    def add_attr(self,attr,shape):
+=======
                 self.add_frame(self._last_frame_ind+1, **attrs)
 
     def add_attr(self, attr, shape):
+>>>>>>> 4c2722a3fcadace9ef261cd86d95e432a14f8376
         if attr in self.attrs_names:
             raise ValueError(f'Trajectory already has attribute {attr}')
 
@@ -220,18 +312,27 @@ class H5_Trajectory(Trajectory):
         self.shapes.append(shape)
 
         for i in range(len(self)):
+<<<<<<< HEAD
+            self.file[str(i).zfill(self.string_format_val)].create_dataset(attr,shape=shape,**self._dataset_kwards)
+
+    def add_frame(self,step,**attrs):
+=======
             self.file[str(i).zfill(self.string_format_val)].create_dataset(
                 attr, shape=shape, **self._empty_dataset_kwargs())
 
     def add_frame(self, step, **attrs):
+>>>>>>> 4c2722a3fcadace9ef261cd86d95e432a14f8376
         if step > self._last_frame_ind:
             self._create_frame(step)
         for attr, value in attrs.items():
 
             self.file[str(self._last_frame_ind).zfill(self.string_format_val)][attr][:] = value
 
-
+<<<<<<< HEAD
+    def copy(self,new):
+=======
     def copy(self, new):
+>>>>>>> 4c2722a3fcadace9ef261cd86d95e432a14f8376
         return self
 
     def _create_frame(self, frame_ind):
@@ -250,7 +351,11 @@ class H5_Trajectory(Trajectory):
             frame = self.cur_step
         return torch.from_numpy(self.file[str(frame).zfill(self.string_format_val)][attr][:])
 
+<<<<<<< HEAD
+    def _set_frame_attr(self,attr,value,frame=None):
+=======
     def _set_frame_attr(self, attr, value, frame=None):
+>>>>>>> 4c2722a3fcadace9ef261cd86d95e432a14f8376
         if not frame:
             frame = self.cur_step
         if frame > self._last_frame_ind:

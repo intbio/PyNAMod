@@ -1,5 +1,9 @@
 import torch
 
+<<<<<<< HEAD
+from pynamod.geometry.trajectories import Tensor_Trajectory, H5_Trajectory
+=======
+>>>>>>> 4c2722a3fcadace9ef261cd86d95e432a14f8376
 from pynamod.geometry.bp_step_geometry import Geometry_Functions
 from pynamod.geometry.tensor_subclasses import mod_Tensor
 from pynamod.geometry.trajectories import H5_Trajectory, Tensor_Trajectory
@@ -19,7 +23,11 @@ class Geometrical_Parameters(Geometry_Functions):
         if origins is not None:
             self.dtype = origins.dtype
             self.len = origins.shape[0]
+<<<<<<< HEAD
+            origins = origins.reshape(-1,1,3)
+=======
             origins = origins.reshape(-1, 1, 3)
+>>>>>>> 4c2722a3fcadace9ef261cd86d95e432a14f8376
 
         if trajectory:
             self.trajectory = trajectory
@@ -30,6 +38,7 @@ class Geometrical_Parameters(Geometry_Functions):
         if not empty:
             self.get_new_params_set(local_params, ref_frames, origins)
 
+<<<<<<< HEAD
     def to(self,device):
         self.trajectory.ref_frames_traj = mod_Tensor(self.trajectory.ref_frames_traj.to(device),self)
         self.trajectory.origins_traj = mod_Tensor(self.trajectory.origins_traj.to(device),self)
@@ -91,7 +100,39 @@ class Geometrical_Parameters(Geometry_Functions):
         self._auto_rebuild_sw = False
 
         getattr(self,rebuild_func_name)(*args,**kwards)
+=======
+    def to(self, device):
+        self.trajectory.ref_frames_traj = mod_Tensor(self.trajectory.ref_frames_traj.to(device), self)
+        self.trajectory.origins_traj = mod_Tensor(self.trajectory.origins_traj.to(device), self)
+        self.trajectory.local_params_traj = mod_Tensor(self.trajectory.local_params_traj.to(device), self)
 
+    def get_new_params_set(self, local_params=None, ref_frames=None, origins=None):
+        set_from_local_params = local_params is not None
+        set_from_r_and_o = ref_frames is not None and origins is not None
+
+        self._auto_rebuild_sw = False
+
+        if set_from_r_and_o and set_from_local_params:
+
+            if not origins.dtype == ref_frames.dtype == local_params.dtype:
+                raise TypeError("Dtypes don't match")
+
+            self._set_from_all_params(local_params, ref_frames, origins)
+
+        elif set_from_r_and_o:
+
+            if origins.dtype != ref_frames.dtype:
+                raise TypeError("Origins and reference frames dtypes don't match")
+
+            self._set_from_r_and_o(ref_frames, origins)
+
+        elif set_from_local_params:
+
+            self._set_from_local_params(local_params)
+
+        else:
+            raise TypeError('Geometrical_parameters should be initialized with local parameters or reference frames and origins')
+>>>>>>> 4c2722a3fcadace9ef261cd86d95e432a14f8376
 
         self._auto_rebuild_sw = self.auto_rebuild
         return self
