@@ -1,4 +1,0 @@
---extra-index-url https://download.pytorch.org/whl/cu130
---find-links https://data.pyg.org/whl/torch-2.9.0+cu130.html
-torch==2.9.*
-pdb2pqr
