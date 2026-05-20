@@ -369,7 +369,7 @@ def get_all_nucleotides(DNA_Structure, leading_strands, sel, use_full_nucleotide
                     R, o = get_base_ref_frame(sum(frame_stand_sel), sum(frame_exp_sel))
                 else:
                     R, o = get_base_ref_frame(sum(stand_sel), sum(exp_sel))
-                nucleotides_data.append(base, residue.resid, residue.segid, leading_strand, R, o.reshape(1, 3), sum(stand_sel), sum(exp_sel), None)
+                nucleotides_data.append(base, residue_str, residue.resid, residue.segid, leading_strand,R,o.reshape(1,3),sum(stand_sel),sum(exp_sel),None)
 
     if len(nucleotides_data) == 0:
         raise ValueError('No nucleotides found.')

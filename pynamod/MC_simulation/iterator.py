@@ -1,11 +1,8 @@
-import signal
-
-import numpy as np
 import torch
-
-from pynamod.geometry.trajectories import H5_Trajectory, Tensor_Trajectory
-from pynamod.MC_simulation.rotation_handler import _Rotation_Handler
+import signal
+from pynamod.geometry.trajectories import Tensor_Trajectory
 from pynamod.MC_simulation.stats_display import _Stats_Display
+from pynamod.MC_simulation.rotation_handler import _Rotation_Handler
 
 
 class Iterator:
@@ -16,27 +13,54 @@ class Iterator:
 
         self.res_trajectory = cg_structure.dna.geom_params.trajectory
 
-    def run(self, target_accepted_steps=int(1e5), max_steps=int(1e6), transfer_to_memory_every=None, save_every=1,
-            mute=False, KT_factor=1, integration_mod='minimize', device='cpu', traj_init_step=None):
+    def run(self, target_accepted_steps=int(1e5), max_steps=int(1e6), transfer_to_memory_every=None, save_every=1, rebuild_every=400,
+            KT_factor=1, mute=False, integration_mode='minimize', device='cpu', traj_init_step=None, dtype=torch.float,debug = False,output=None):
+        '''Starts Monte Carlo Simulation.
+    
+            Attributes:
+    
+            - **target_accepted_steps** - number of accepted simulation steps to reach, default 1e5.
+    
+            - **max_steps** - maximum number of attempted steps. If reached run will be terminated even if target_accepted_steps was not matched. Default 1e6.
+    
+            - **transfer_to_memory_every** - When using gpu, accepted frames will be flushed to memory or h5 file (depending on trajectory of CG structure) each chosen number of accepted steps. If None will flush only at the end of the simulation. Default None.
+    
+            - **save_every** - Accepted frames will be saved in resulting trajectory every chosen number of accepted steps. Default 1.
 
-        self._prepare_system(target_accepted_steps, transfer_to_memory_every, device, integration_mod, traj_init_step, KT_factor)
+            - **rebuild_every** - Full procedure of rebuilding from bp step paramaters will be used every chosen number of accepted steps instead of simplified rotation and shift. This is necessary to negate computing error. The required frequency can be determined using debug (see debug attribute). Default 400.
+
+            - **KT_factor** - factor that will be used for KT from pynamod.Energy object in Metropolis criterion. Defailt 1.
+
+            - **mute** - If False, tqdm bars will be used to show simulation data, if True instead every 5 minutes number of accepted steps and acceptance rate will be printed. Default False.
+
+            - **integration_mode** - 'minimize' or 'random_step'. If minimize, Iterator will go through movable bp steps repeatedly using one of them as a changing bp step. If 'random_step', Iterator will choose a bp step to change randomly from movable bp steps. Default 'minimize'.
+
+            - **device** - pytorch style 'cpu' or 'cuda' ('cuda:n'). Device to use for simulations. Default 'cpu'.
+
+            - **traj_init_step** - If not None, frame from this trajectory step will be used as an initial conformation. If None, current step from trajectory is used. Default None.
+
+            - **dtype** - tensor dtype to use in calculations. Default torch.float.
+
+            - **debug** - 
+        '''
+        self._prepare_system(target_accepted_steps, transfer_to_memory_every, rebuild_every,
+                             device, integration_mode, traj_init_step, KT_factor, dtype, debug)
 
         self._stop_loop = False
         signal.signal(signal.SIGINT, self._signal_handler)
-
-        self._stats_display = _Stats_Display(max_steps, mute)
+        self._stats_display = _Stats_Display(max_steps,mute,output)
 
         while self.total_step < max_steps and self.accepted_steps < target_accepted_steps:
 
             self._integration_step(save_every, integration_mode)
 
             self._stats_display.show_step_data(self.accepted_steps, self.total_step, self.prev_e.sum().item())
-            # Stop only when a step is completed in case of keyboard interrupt.
+            #Stop only when a step is completed in case of keyboard interrupt.
             if self._stop_loop:
                 break
 
         self._transfer_to_memory(steps=self.trajectory.cur_step)
-        self._stats_display.show_final_data(target_accepted_steps, self._stop_loop, self.accepted_steps, self.total_step)
+        self._stats_display.show_final_data(target_accepted_steps,self._stop_loop,self.accepted_steps,self.total_step)
 
     def to(self, device):
         self.trajectory.to(device)
@@ -61,7 +85,10 @@ class Iterator:
             traj_init_step = len(self.res_trajectory) - 1
         cur_step = self.res_trajectory.cur_step
         self.res_trajectory.cur_step = traj_init_step
-        self._create_tens_trajectory()
+        self._create_tens_trajectory(dtype)
+        if 'rlsp_origins' not in self.res_trajectory.attrs_names:
+            self.res_trajectory.add_attr('rlsp_origins',self.trajectory.rlsp_origins.shape)
+            self.res_trajectory.rlsp_origins = self.trajectory.rlsp_origins
         self.to(device)
 
         if 'energies' not in self.res_trajectory.attrs_names:
@@ -77,13 +104,10 @@ class Iterator:
         self._scaled_KT = KT_factor*self.energy.KT
 
     def _set_change_indices(self, integration_mode):
-
         self.movable_ind = torch.arange(self.trajectory.data_len, dtype=int)[self.cg_structure.dna.movable_steps]
-        if self.movable_ind.shape[0] > 0 and self.movable_ind[0] == 0:
+        if self.movable_ind[0] == 0:
             self.movable_ind = self.movable_ind[1:]
-        if self.movable_ind.shape[0] == 0:
-            raise ValueError('No movable DNA steps available for MC simulation. Set cg_structure.dna.movable_steps[1:] = True or build/analyze DNA with movable=True.')
-        if integration_mod == 'minimize':
+        if integration_mode == 'minimize':
             self.cur_movable_ind = 0
         elif integration_mode == 'random_step':
             self.movable_ind_len = self.movable_ind.shape[0]
@@ -98,7 +122,7 @@ class Iterator:
         traj_len = self.transfer_to_memory_every + 1
         dtype = init_ref_frames.dtype
 
-        self.trajectory = Tensor_Trajectory(dtype, traj_len, ln, torch.tensor, attrs_names=['prot_origins'], shapes=[(traj_len, init_prot_ori.shape[0], 1, 3)])
+        self.trajectory = Tensor_Trajectory(dtype,traj_len,ln,torch.tensor,attrs_names=['rlsp_origins'],shapes=[(traj_len,init_rlsp_ori.shape[0],1,3)])
         self.trajectory.origins, self.trajectory.ref_frames = init_ori, init_ref_frames
         self.trajectory.local_params = init_local_params
         self.trajectory.rlsp_origins = init_rlsp_ori
@@ -124,7 +148,7 @@ class Iterator:
         r = torch.rand(1).item()
         self.total_step += 1
 
-        if not Del_E.isnan() and Del_E < 0 or (not (torch.isinf(torch.exp(Del_E))) and (r <= torch.exp(-Del_E/self._scaled_KT))):
+        if not Del_E.isnan() and Del_E < 0 or (not (torch.isinf(torch.exp(Del_E))) and (r  <= torch.exp(-Del_E/self._scaled_KT))):
             self.energy.update_matrices(e_mat, s_mat, change_indices[1])
             self.prev_e += e_dif_components
             self.accepted_steps += 1
@@ -166,12 +190,12 @@ class Iterator:
             self.cur_movable_ind += 1
             if self.cur_movable_ind == self.movable_ind.shape[0]:
                 self.cur_movable_ind = 0
-        elif integration_mod == 'random_step':
+        elif integration_mode == 'random_step':
             cur_index = torch.randint(self.movable_ind_len, (1,))
 
-        dna_change_index = self.movable_ind[cur_index]
-        prot_change_index = sum([protein.n_cg_beads for protein in self.cg_structure.proteins if protein.ref_pair.ind < dna_change_index])
-        return dna_change_index, prot_change_index
+        ref_ori_change_index = self.movable_ind[cur_index]
+        rlsp_change_index = sum([group.n_cg_beads for group in self.cg_structure.rlsp_groups if group.ref_pair.ind < ref_ori_change_index])
+        return ref_ori_change_index,rlsp_change_index
 
     def _transfer_to_memory(self, steps=None):
         if steps is None:
@@ -186,5 +210,6 @@ class Iterator:
 
         for i in range(steps):
             self.res_trajectory.cur_step += 1
-            self.res_trajectory.add_frame(self.res_trajectory.cur_step, origins=origins_traj[i], ref_frames=ref_frames_traj[i],
-                                          local_params=local_params_traj[i], energies=energy_comp_traj[i])
+            self.res_trajectory.add_frame(self.res_trajectory.cur_step, origins=origins_traj[i],
+                                          ref_frames=ref_frames_traj[i], local_params=local_params_traj[i],
+                                          rlsp_origins=rlsp_origins_traj[i], energies=energy_comp_traj[i])
