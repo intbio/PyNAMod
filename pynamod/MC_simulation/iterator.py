@@ -161,7 +161,7 @@ class Iterator:
 
                 rlsp_origins = []
                 for rlsp_group in self.cg_structure.rlsp_groups:
-                    ref_ind = rlsp_group.ref_pair.ind
+                    ref_ind = rlsp_group.ref_ind
                     ref_r = self._rotation_handler.ref_frames[ref_ind]
                     ref_ori = self._rotation_handler.origins[ref_ind]
                     rlsp_origins.append(rlsp_group.get_true_pos(ref_om=ref_ori, ref_Rm=ref_r))
@@ -194,7 +194,7 @@ class Iterator:
             cur_index = torch.randint(self.movable_ind_len, (1,))
 
         ref_ori_change_index = self.movable_ind[cur_index]
-        rlsp_change_index = sum([group.n_cg_beads for group in self.cg_structure.rlsp_groups if group.ref_pair.ind < ref_ori_change_index])
+        rlsp_change_index = sum([group.n_cg_beads for group in self.cg_structure.rlsp_groups if group.ref_ind < ref_ori_change_index])
         return ref_ori_change_index,rlsp_change_index
 
     def _transfer_to_memory(self, steps=None):

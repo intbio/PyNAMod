@@ -5,17 +5,34 @@ import subprocess
 import tempfile
 from sklearn.neighbors import KNeighborsClassifier
 
+def load_rlspg_from_h5(h5_dataset):
+    if 'group_type' in h5_dataset.keys():
+        group_type = str(h5_dataset['group_type'])
+    else:
+        if h5_dataset['supdata'][0] > 6:
+            group_type = 'Protein'
+        else:
+            group_type = 'DNA Pair'
 
+    if group_type == 'Protein':
+        rlspg = Protein()
+    else:
+        rlspg = Real_Space_Beads_Groups()
+
+    rlspg.load_from_h5(h5_dataset,group_type=group_type)
+    return rlspg
+    
 class Real_Space_Beads_Groups:
     def __init__(self, n_cg_beads=None, ref_vectors=None, charges=None, masses=None,
-                 radii=None, ref_pair=None, eps=1,
-                 binded_dna_len=None, cg_structure=None):
+                 radii=None, ref_ind=None, eps=1,
+                 binded_dna_len=None, cg_structure=None, group_type = None):
         self.n_cg_beads = n_cg_beads
-        self.ref_pair = ref_pair
+        self.ref_ind = ref_ind
         self.ref_vectors = ref_vectors
         self.charges = charges
         self.masses = masses
         self.radii = radii
+        self.group_type = group_type
         if isinstance(eps, torch.Tensor) or self.n_cg_beads is None:
             self.eps = eps
         else:
@@ -30,34 +47,40 @@ class Real_Space_Beads_Groups:
         group.create_dataset('charges', data=self.charges, **dataset_kwards)
         group.create_dataset('radii', data=self.radii, **dataset_kwards)
         group.create_dataset('eps', data=self.eps, **dataset_kwards)
-        group.create_dataset('supdata', data=[self.n_cg_beads, self.ref_pair.ind, self.binded_dna_len], **dataset_kwards)
+        group.create_dataset('supdata', data=[self.n_cg_beads, self.ref_ind, self.binded_dna_len], **dataset_kwards)
+        group.create_dataset('group_type', data=self.group_type, **dataset_kwards)
 
-    def load_from_h5(self,file, group_name='rlsp_0_CG_parameters'):
-                
-        self.ref_vectors = torch.from_numpy(file[group_name]['ref_vectors'][:]).to(torch.double)
-        self.charges = torch.from_numpy(file[group_name]['charges'][:])
-        self.radii = torch.from_numpy(file[group_name]['radii'][:])
-        self.eps = torch.from_numpy(file[group_name]['eps'][:])
-        self.n_cg_beads = int(file[group_name]['supdata'][0])
-        self.binded_dna_len = int(file[group_name]['supdata'][2])
-        return int(file[group_name]['supdata'][1])
-
+    def load_from_h5(self, h5_dataset ,group_type=None):
+        if group_type is not None:
+            self.group_type = group_type
+        else:
+            self.group_type = str(h5_dataset['group_type'])
+        self.ref_vectors = torch.from_numpy(h5_dataset['ref_vectors'][:]).to(torch.double)
+        self.charges = torch.from_numpy(h5_dataset['charges'][:])
+        self.radii = torch.from_numpy(h5_dataset['radii'][:])
+        self.eps = torch.from_numpy(h5_dataset['eps'][:])
+        self.n_cg_beads = int(h5_dataset['supdata'][0])
+        self.binded_dna_len = int(h5_dataset['supdata'][2])
+        self.ref_ind = int(h5_dataset['supdata'][1])
+        
     def get_true_pos(self, dna_structure=None, ref_om=None, ref_Rm=None):
         if dna_structure is None:
             dna_structure = self.cg_structure.dna
 
         if ref_om is None:
-            ref_om = torch.tensor(dna_structure.origins[self.ref_pair.ind]).to(self.ref_vectors.dtype)
+            ref_om = torch.tensor(dna_structure.origins[self.ref_ind]).to(self.ref_vectors.dtype)
         if ref_Rm is None:
-            ref_Rm = torch.tensor(dna_structure.ref_frames[self.ref_pair.ind]).to(self.ref_vectors.dtype)
+            ref_Rm = torch.tensor(dna_structure.ref_frames[self.ref_ind]).to(self.ref_vectors.dtype)
 
         return torch.matmul(self.ref_vectors.reshape(-1,1,3).to(ref_om.dtype), ref_Rm.T) + ref_om
 
-    def copy(self):
-        return Real_Space_Beads_Groups(n_cg_beads=self.n_cg_beads, ref_pair=self.ref_pair,
+    def copy(self,cg_structure=None):
+        if cg_structure is None:
+            cg_structure = self.cg_structure
+        return type(self)(n_cg_beads=self.n_cg_beads, ref_ind=self.ref_ind,
                        eps=self.eps.clone(), ref_vectors=self.ref_vectors.clone(),
                        radii=self.radii.clone(), charges=self.charges.clone(),
-                       cg_structure=self.cg_structure,  binded_dna_len=self.binded_dna_len)
+                       cg_structure=cg_structure,  binded_dna_len=self.binded_dna_len,group_type=self.group_type)
 
     def to(self, device):
         self.charges = self.charges.to(device)
@@ -66,8 +89,8 @@ class Real_Space_Beads_Groups:
         self.ref_vectors = self.ref_vectors.to(device)
 
     def __repr__(self):
-        return f'<Real Space Beads group with {self.n_cg_beads} CG beads and linked to {self.ref_pair.ind}th pair>' 
-    
+        return f'<{self.group_type} with {self.n_cg_beads} CG beads linked to {self.ref_ind}th pair>' 
+
     @property
     def origins(self):
         return self.get_true_pos()
@@ -77,11 +100,11 @@ class Protein(Real_Space_Beads_Groups):
     '''This class contains protein model as coarse grained beads with radii and charges. This class is always related to CG structure that stores positions of CG beads in All_Coords object. Init function of this class requires pdb2pqr class if initialized from mda Universe without charges.'''
 
     def __init__(self,n_cg_beads=50, mdaUniverse=None,  ref_vectors=None,
-                 charges=None, masses=None, radii=None, ref_pair=None,
-                 eps=1, binded_dna_len=None, cg_structure=None):
+                 charges=None, masses=None, radii=None, ref_ind=None,
+                 eps=1, binded_dna_len=None, cg_structure=None,group_type=None):
 
         super().__init__(n_cg_beads, ref_vectors, charges, masses,
-                         radii, ref_pair, eps, binded_dna_len, cg_structure)
+                         radii, ref_ind, eps, binded_dna_len, cg_structure,'Protein')
 
         if mdaUniverse:
             if hasattr(mdaUniverse.atoms, 'charges'):
@@ -133,8 +156,8 @@ class Protein(Real_Space_Beads_Groups):
             origins = origins + eps * np.exp(-k_beads/lmbd).reshape(-1,1) * (ref_atom_r - origins)
 
         origins = torch.from_numpy(origins.reshape(-1,1,3))
-        ref_om = torch.tensor(dna_structure.origins[self.ref_pair.ind]).to(origins.dtype)
-        ref_Rm = torch.tensor(dna_structure.ref_frames[self.ref_pair.ind]).to(origins.dtype)
+        ref_om = torch.tensor(dna_structure.origins[self.ref_ind]).to(origins.dtype)
+        ref_Rm = torch.tensor(dna_structure.ref_frames[self.ref_ind]).to(origins.dtype)
         self.ref_vectors = torch.matmul((origins - ref_om),ref_Rm)
 
     def _get_cg_params(self):
@@ -157,12 +180,3 @@ class Protein(Real_Space_Beads_Groups):
 
         self.charges = torch.from_numpy(self.charges)
         self.masses = torch.from_numpy(self.masses)
-
-    def copy(self):
-        return Protein(mdaUniverse=self.u, n_cg_beads=self.n_cg_beads, ref_pair=self.ref_pair,
-                       eps=self.eps.clone(), ref_vectors=self.ref_vectors.clone(),
-                       radii=self.radii.clone(), charges=self.charges.clone(),
-                       cg_structure=self.cg_structure,  binded_dna_len=self.binded_dna_len)
-
-    def __repr__(self):
-        return f'<Protein with {self.n_cg_beads} CG beads and linked to {self.ref_pair.ind}th pair>'

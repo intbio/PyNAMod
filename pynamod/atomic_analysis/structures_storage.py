@@ -240,9 +240,9 @@ class Pairs_Storage(Structures_Storage):
     def __init__(self,pair_class,nucleotides_storage,*stored_params):
 
         self.nucleotides_storage = nucleotides_storage
-        structure_attrs_list = ['lead_nucl_ind', 'lag_nucl_ind', 'radius','charge','epsilon','geom_params']
+        structure_attrs_list = ['lead_nucl_ind', 'lag_nucl_ind','geom_params']
         if not stored_params:
-            stored_params = [[],[],[],[],[],[],[]]
+            stored_params = [[],[],[]]
 
         super().__init__(pair_class,structure_attrs_list,*stored_params)
 

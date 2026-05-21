@@ -12,7 +12,7 @@ from MDAnalysis.coordinates.memory import MemoryReader
 from MDAnalysis.analysis import align
 import matplotlib.pyplot as plt
 from pynamod.structures.DNA_structure import DNA_Structure
-from pynamod.structures.rlsp_group import Protein, Real_Space_Beads_Groups
+from pynamod.structures.rlsp_group import Protein, load_rlspg_from_h5
 
 from pynamod.structures.nucleotides_models import Nucleotide_Creator
 
@@ -31,9 +31,8 @@ class CG_Structure:
         - **u** - (optional) contains initial mda Universe if given.
     '''
 
-    def __init__(self, dna_structure=None, proteins=None, mdaUniverse=None,
-                 pdb_id=None, file=None, all_coords=None, add_proteins=True,
-                 nucleotides_model = '1spbp', trajectory=None):
+    def __init__(self, mdaUniverse=None, pdb_id=None, file=None,
+                 nucleotides_model='1spbp'):
         if mdaUniverse:
             self.u = mdaUniverse
         elif pdb_id:
@@ -43,26 +42,18 @@ class CG_Structure:
         else:
             self.u = None
         if self.u:
-            if not hasattr(self.u.atoms,'types'):
+            if not hasattr(self.u.atoms, 'types'):
                 self.u.add_TopologyAttr('elements', [guess_atom_element(name) for name in self.u.atoms.names])
-
-        self.nucleotides_model = nucleotides_model
 
         self.dna = DNA_Structure(u=self.u)
         self.dna.cg_structure = self
+        self.nucleotides_model = nucleotides_model
 
-        if proteins:
-            self.proteins = proteins
-            for protein in proteins:
-                protein.cg_structure = self
-            self.rlsp_groups = proteins.copy()
-        else:
-            self.proteins = []
+        self._proteins = []
+        self._rlsp_groups = []
 
-            self.rlsp_groups = []
-
-    def analyze_dna(self,leading_strands=None,pairs_in_structure=None,sel='(type C or type O or type N) and not protein',
-                    trajectory=None,overwrite_existing_dna=False,movable=False):
+    def analyze_dna(self, leading_strands=None, pairs_in_structure=None, sel='(type C or type O or type N) and not protein',
+                    trajectory=None, overwrite_existing_dna=False, movable=False):
         '''Method that runs analysis of mda Universe and trajectory if given.
 
             Arguments:
@@ -81,7 +72,8 @@ class CG_Structure:
 
         if trajectory is None:
             trajectory = self.u.trajectory[1:]
-        self.dna.build_from_u(leading_strands,pairs_in_structure,len(trajectory)+1,sel,overwrite_existing_dna,movable=movable)
+        self.dna.build_from_u(leading_strands, pairs_in_structure, len(trajectory)+1,
+                              sel, overwrite_existing_dna, movable=movable)
 
         if len(trajectory) != 0:
             self.dna.analyze_trajectory(trajectory)
@@ -105,42 +97,36 @@ class CG_Structure:
 
     def save_to_h5(self, file, **dataset_kwards):
         self.dna.save_to_h5(file, **dataset_kwards)
-        for i, protein in enumerate(self.rlsp_groups):
-            protein.save_to_h5(file, group_name=f'rlspg_{i}_CG_parameters', **dataset_kwards)
+        frt = len(str(len(self.rlsp_groups)))
+        for i, group in enumerate(self.rlsp_groups):
+            group.save_to_h5(file, group_name=f'rlspg_{str(i).zfill(frt)}_CG_parameters', **dataset_kwards)
 
     def load_symmetrical_nucleosome(self):
-        self.load_from_h5(h5py.File(files('pynamod').joinpath(f'structures/nucleosome_sym.h5')))
+        self.load_from_h5(h5py.File(files('pynamod').joinpath('structures/nucleosome_sym.h5')))
         return self
 
     def load_from_h5(self, file):
         self.dna.load_from_h5(file)
+        loaded_groups = []
+        frt = len(str(len(file.keys())))
+        class_name = 'rlspg'
+        
+        if f'{class_name}_{str(0).zfill(frt)}_CG_parameters' not in file.keys():
+            frt = 1
+            if f'{class_name}_{str(0).zfill(frt)}_CG_parameters' not in file.keys():
+                class_name = 'protein'
+            
         for i in range(len(file)-1):
-            group_name = f'rlspg_{i}_CG_parameters'
-            try:
-                t = file[group_name]
-            except KeyError as ker:
-                name = str(ker)[46:51]
-                if name != 'rlspg':
-                    raise ker
-                group_name = 'protein' + group_name[5:]
-                
-            if file[group_name]['supdata'][0] > 6:
-                protein = Protein()
-                ref_ind = protein.load_from_h5(file, group_name=group_name)
-                protein.ref_pair = self.dna.pairs_list[ref_ind]
-                protein.cg_structure = self
-                self.rlsp_groups.append(protein)
-                self.proteins.append(protein)
-            else:
-                rlsp = Real_Space_Beads_Groups()
-                ref_ind = rlsp.load_from_h5(file, group_name=group_name)
-                rlsp.ref_pair = self.dna.pairs_list[ref_ind]
-                rlsp.cg_structure = self
-                self.rlsp_groups.append(rlsp)
+            group_name = f'{class_name}_{str(i).zfill(frt)}_CG_parameters'
+            group = load_rlspg_from_h5(file[group_name])
+            group.cg_structure = self
+            loaded_groups.append(group)
 
+        self.add_rlsp_groups(loaded_groups)
         return self
 
-    def analyze_protein(self, protein_u=None, n_cg_beads=50, ref_index=None, binded_dna_len=None):
+    def analyze_protein(self, protein_u=None, n_cg_beads=50,
+                        ref_ind=None, binded_dna_len=None):
         '''Method that finds protein structure in given mda Universe or Universe attached to the instance of class. Coarse Grained structure is than constructed based on protein and added to the proteins list.
 
             Arguments:
@@ -151,8 +137,8 @@ class CG_Structure:
 
             **ref_index** - index of nucleotide pair relative to which position of protein is defined. Note that selection of reference pair is important for slicing, as all proteins without reference pair after slice are dropped from the sliced structure.
             '''
-        if not ref_index:
-            ref_index = len(self.dna.pairs_list)//2
+        if not ref_ind:
+            ref_ind = len(self.dna.pairs_list)//2
         if protein_u is None:
             protein_u = self.u.select_atoms('protein')
             if hasattr(protein_u, 'altLocs'):
@@ -162,14 +148,20 @@ class CG_Structure:
             binded_dna_len = len(self.dna.pairs_list)
 
         new = Protein(mdaUniverse = protein_u, n_cg_beads=n_cg_beads,
-                      ref_pair=self.dna.pairs_list[ref_index], binded_dna_len=binded_dna_len)
+                      ref_ind=ref_ind, binded_dna_len=binded_dna_len)
         new.cg_structure = self
         new.build_model(self.dna)
-        self.proteins.append(new)
-        self.rlsp_groups.append(new)
-        self.proteins = sorted(self.proteins, key=lambda p: p.ref_pair.ind)
-        self.rlsp_groups = sorted(self.rlsp_groups, key=lambda p: p.ref_pair.ind)
+        self.add_rlsp_groups([new])
 
+    def add_rlsp_groups(self, groups_list):
+        for group in groups_list:
+            self._rlsp_groups.append(group)
+            if group.group_type == 'Protein':
+                self._proteins.append(group)
+        
+        self._proteins = sorted(self._proteins, key=lambda p: p.ref_ind)
+        self._rlsp_groups = sorted(self._rlsp_groups, key=lambda p: p.ref_ind)
+        
     def get_cg_mda_traj(self, allign_sel='all'):
         '''Method that creates trajectory of CG model as a mda Universe.
 
@@ -238,7 +230,6 @@ class CG_Structure:
                                        label='charge',
                                        ticks=[-max_charge,0,max_charge])
 
-
         colors = np.array([cb.cmap(norm(c))[:3] for c in self.charges]).flatten().tolist()
         view.shape.add_buffer('sphere',position=self.origins.flatten().tolist(),
                               color=colors,radius=self.radii.tolist())
@@ -256,32 +247,25 @@ class CG_Structure:
             **structures** - list of CG structures to append.
         '''
         structures = [structure.copy() for structure in structures]
-        self.proteins += [protein for structure in structures for protein in structure.proteins]
-        self.rlsp_groups += [group for structure in structures for group in structure.rlsp_groups]
+        self._proteins += [protein for structure in structures for protein in structure.proteins]
+        self._rlsp_groups += [group for structure in structures for group in structure.rlsp_groups]
         update_value = len(self.dna.pairs_list)
         self.dna.append_structures([structure.dna for structure in structures], copy=False)
         for structure in structures:
             for group in structure.rlsp_groups:
                 group.cg_structure = self
-                group.ref_pair = self.dna.pairs_list[group.ref_pair.ind+update_value]
+                group.ref_ind = group.ref_ind+update_value
             update_value += len(structure.dna.pairs_list)
 
         return self
 
     def copy(self):
-        '''Method that creates a deep copy of the CG structure.
+        '''
+        Method that creates a deep copy of the CG structure.
         '''
         new = CG_Structure(mdaUniverse=self.u)
         new.dna = self.dna.copy()
-        new.rlsp_groups = []
-        for rlsp in self.rlsp_groups:
-            rlsp = rlsp.copy()
-            new.rlsp_groups.append(rlsp)
-            ind = new.rlsp_groups[-1].ref_pair.ind
-            new.rlsp_groups[-1].ref_pair = new.dna.pairs_list[ind]
-            rlsp.cg_structure = new
-            if rlsp.n_cg_beads > 6:
-                new.proteins.append(rlsp)
+        new.add_rlsp_groups([group.copy(new) for group in self.rlsp_groups])
         return new
 
     def to(self, device):
@@ -302,14 +286,14 @@ class CG_Structure:
         - 3spn
         '''
         nucleotide_creator = Nucleotide_Creator(self.nucleotides_model)
-
+        nucleotides_groups = []
         for pair in self.dna.pairs_list:
             ind = pair.ind
-            pair_beads = nucleotide_creator.create(pair, self.dna.origins[ind], self.dna.ref_frames[ind])
+            pair_beads = nucleotide_creator.create(ind, self.dna.origins[ind], self.dna.ref_frames[ind])
             pair_beads.cg_structure = self
-            self.rlsp_groups.append(pair_beads)
+            nucleotides_groups.append(pair_beads)
 
-        self.rlsp_groups = sorted(self.rlsp_groups, key=lambda p: p.ref_pair.ind)
+        self.add_rlsp_groups(nucleotides_groups)
 
     def __getitem__(self, sl):
         it = self.copy()
@@ -343,3 +327,11 @@ class CG_Structure:
     @property
     def charges(self):
         return torch.cat([group.charges for group in self.rlsp_groups])
+
+    @property
+    def rlsp_groups(self):
+        return self._rlsp_groups
+
+    @property
+    def proteins(self):
+        return self._proteins

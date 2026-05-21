@@ -26,13 +26,14 @@ class Nucleotide_Creator:
                 path = files('pynamod').joinpath(f'structures/ref_3spn/{name}.h5')
                 rlspg.load_from_h5(h5py.File(path, 'r'))
                 self.ref_rlsps[name] = rlspg
+                rlspg.bead_type = 'DNA Pair'
 
         elif model_type == '1spbp':
             self.create = self.create_1spbp
         else:
             raise AttributeError('Unknown nucleotide model')
 
-    def create_1spn(self, pair, ref_ori, ref_r):
+    def create_1spn(self, ind, ref_ori, ref_r):
         lead_nucl_u = pair.lead_nucl.res_atoms
         lag_nucl_u = pair.lag_nucl.res_atoms
 
@@ -42,11 +43,9 @@ class Nucleotide_Creator:
                                               lead_nucl_u.center_of_mass()]).reshape(-1,1,3))
         ref_vectors = torch.matmul((origins - ref_ori), ref_r)
 
-        return Real_Space_Beads_Groups(n_cg_beads=2, ref_pair=pair,
-                                       ref_vectors=ref_vectors, charges=charges,
-                                       radii=radii, binded_dna_len=1)
+        return self._init_rlspg(ind,2,ref_vectors,charges,radii)
 
-    def create_3spn_from_atomic(self, pair, ref_ori, ref_r, nucleotide_graphs=nucleotide_graphs):
+    def create_3spn_from_atomic(self, ind, ref_ori, ref_r, nucleotide_graphs=nucleotide_graphs):
         radii = []
         charges = []
         origins = []
@@ -88,23 +87,23 @@ class Nucleotide_Creator:
         charges = torch.tensor(charges)
         ref_vectors = torch.matmul((origins - ref_ori), ref_r)
 
-        return Real_Space_Beads_Groups(n_cg_beads=radii.shape[0], ref_pair=pair,
-                                       ref_vectors=ref_vectors, charges=charges,
-                                       radii=radii, binded_dna_len=1)
+        return self._init_rlspg(ind,radii.shape[0],ref_vectors,charges,radii)
 
-    def create_3spn_generated(self, pair, ref_ori, ref_r):
+    def create_3spn_generated(self, ind, ref_ori, ref_r):
         name = pair.lead_nucl.restype + pair.lag_nucl.restype
         rlspg = self.ref_rlsps[name].copy()
-        rlspg.ref_pair = pair
+        rlspg.ref_ind = ind
         return rlspg
 
-    def create_1spbp(self, pair, ref_ori, ref_r):
+    def create_1spbp(self, ind, ref_ori, ref_r):
         radii = torch.tensor([10])
         charges = torch.tensor([-2])
 
         ref_vectors = torch.zeros(3)
 
-        return Real_Space_Beads_Groups(n_cg_beads=1, ref_pair=pair,
-                                       ref_vectors=ref_vectors, charges=charges,
-                                       radii=radii, binded_dna_len=1)
+        return self._init_rlspg(ind,1,ref_vectors,charges,radii)
 
+    def _init_rlspg(self,ind,n_cg_beads,ref_vectors,charges,radii):
+        return Real_Space_Beads_Groups(n_cg_beads=n_cg_beads, ref_ind=ind,
+                                       ref_vectors=ref_vectors, charges=charges,
+                                       radii=radii, binded_dna_len=1,group_type='DNA Pair')

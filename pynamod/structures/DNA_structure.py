@@ -43,7 +43,6 @@ class DNA_Structure:
             raise RuntimeError('No pairs were found')
 
         self.get_geom_params(traj_len,overwrite_existing_dna)
-        self._set_pair_params_list()
         self.movable_steps = torch.full((len(self.pairs_list),),movable)
 
     def get_geom_params(self,traj_len=1,overwrite_existing_dna=False):
@@ -86,9 +85,6 @@ class DNA_Structure:
         self.pairs_list = Pairs_Storage(Base_Pair,self.nucleotides)
         self.pairs_list.lead_nucl_inds = list(range(ln))
         self.pairs_list.lag_nucl_inds = [i+ln for i in range(ln)]
-        self.pairs_list.radii = [radius]*ln
-        self.pairs_list.charges = [charge]*ln
-        self.pairs_list.epsilons = [eps]*ln
         pair_params = torch.zeros(2,6,dtype=torch.double)
         pair_params[1] = torch.from_numpy(BDNA_step[:6])
         self.pairs_list.geom_paramss = [Geometrical_Parameters(local_params=pair_params.clone()) for i in range(ln)]
@@ -99,7 +95,6 @@ class DNA_Structure:
             step_params[i] = torch.from_numpy(averages[sequence[i-1]+sequence[i]])
 
         self.geom_params = Geometrical_Parameters(local_params=step_params)
-        self._set_pair_params_list()
         self.movable_steps = torch.full((len(self.pairs_list),), movable)
 
     def analyze_trajectory(self,trajectory):
@@ -154,13 +149,12 @@ class DNA_Structure:
         self.pairs_list.nucleotides_storage = self.nucleotides
         step_params[0] = torch.zeros(6)
         self.geom_params = Geometrical_Parameters(local_params=step_params)
-        self._set_pair_params_list()
         self.movable_steps = torch.cat([self.movable_steps]+[structure.movable_steps for structure in structures])
         self.movable_steps[0] = False
 
         return self
 
-    def transfer_trajectory_to_h5(self,filename,mode='r+',keep_single_old_frame=None,**datasets_kwards):
+    def transfer_trajectory_to_h5(self, filename,mode='r+',keep_single_old_frame=None,**datasets_kwards):
         old_traj = self.geom_params.trajectory
         self.geom_params.trajectory = H5_Trajectory(filename, len(self.pairs_list),mode=mode,**datasets_kwards)
         if keep_single_old_frame is not None:
@@ -207,18 +201,10 @@ class DNA_Structure:
         params_df = pd.DataFrame(np.hstack([self.pairs_params,self.steps_params]),columns=labels)
         return pd.concat([df,params_df],axis=1)
 
-    def to(self,device):
-        '''Moves tensors of supplemental parameters of DNA to a given device.'''
-        self.radii = self.radii.to(device)
-        self.eps = self.eps.to(device)
-        self.charges = self.charges.to(device)
 
     def copy(self):
         '''Creates a deep copy of self.'''
         new = DNA_Structure()
-        new.radii = self.radii.clone()
-        new.eps = self.eps.clone()
-        new.charges = self.charges.clone()
         new.movable_steps = self.movable_steps.clone()
         new.geom_params = self.geom_params.copy()
         new.pairs_list = self.pairs_list.copy()
@@ -262,22 +248,16 @@ class DNA_Structure:
                                                  ref_frames = torch.tensor(data['ref_frames'])
                                                  )
         self.movable_steps = torch.tensor(data['movable_steps'])
-        self._set_pair_params_list()
 
-    def _set_pair_params_list(self):
-        '''Fetches parameters from individual Pair objects'''
-        self.radii = torch.tensor(self.pairs_list.radii)
-        self.eps = torch.tensor([self.pairs_list.epsilons])
-        self.charges = torch.tensor([self.pairs_list.charges])
+    def _getter(self, attr):
+        return getattr(self.geom_params, attr)
 
-    def _getter(self,attr):
-        return getattr(self.geom_params,attr)
-
-    def _setter(self,value,attr):
-        setattr(self.geom_params,attr,value)
+    def _setter(self,value, attr):
+        setattr(self.geom_params, attr, value)
 
     def _set_property(attr):
-        return property(lambda self: self._getter(attr=attr),lambda self,value: self._setter(value,attr=attr))
+        return property(lambda self: self._getter(attr=attr),
+                        lambda self, value: self._setter(value, attr=attr))
 
     @property
     def trajectory(self):
@@ -297,18 +277,10 @@ class DNA_Structure:
     def __repr__(self):
         return f'<DNA structure with {len(self.pairs_list)} nucleotide pairs>'
 
-    def __getitem__(self,sl):
+    def __getitem__(self, sl):
         ''''''
         attrs = self.__dict__.copy()
         for attr in ('pairs_list', 'geom_params'):
             attrs[attr] = getattr(self,attr)[sl]
-
-        for attr in ('radii', 'eps', 'charges'):
-            if sl.step < 0:
-                it = getattr(self,attr).flip(dims=(0,))
-                new_sl = slice(sl.start,sl.stop,-1*sl.step)
-                attrs[attr] = it[new_sl]
-            else:
-                attrs[attr] = getattr(self,attr)[sl]
 
         return DNA_Structure(**attrs)

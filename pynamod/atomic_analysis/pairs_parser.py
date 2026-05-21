@@ -53,15 +53,13 @@ class Base_Pair:
     
     **pair_name** - string, consists of sorted types of Nucleotides in this pair.
     
-    **radius**, **charge**, **epsilon** - parameters of a pair for energy functions.
-    
     **geom_params** - Geometrical_Parameters object that stores local geometrical parameters of a pair as well as reference middle frame and origin of a pair. Note that this is different from step parameters, as it calculates parameters between two nucleotides.
     
     **pair_params**, **Rm**, **om** - torch Tensors of pair geometrical parameters, reference middle frame and origin.
     
     '''
     def __init__(self, storage_class,lead_nucl_ind=None,
-                 lag_nucl_ind=None,ind=None,lead_nucl=None,lag_nucl=None,radius=10,charge=-2,eps=0.5,geom_params=None):
+                 lag_nucl_ind=None,ind=None,lead_nucl=None,lag_nucl=None,geom_params=None):
         self.storage_class = storage_class
         self.ind = ind
         
@@ -72,7 +70,7 @@ class Base_Pair:
         if ind is None:
             ind = len(storage_class)
             self.ind = ind
-            storage_class.append(lead_nucl_ind,lag_nucl_ind,radius,charge,eps,geom_params)
+            storage_class.append(lead_nucl_ind,lag_nucl_ind,geom_params)
 
             if not storage_class.nucleotides_storage[lead_nucl_ind].leading_strand:
                 self.lead_nucl_ind, self.lag_nucl_ind = self.lag_nucl_ind, self.lead_nucl_ind
@@ -106,7 +104,8 @@ class Base_Pair:
 
     
     def copy(self,**kwards):
-        new = Base_Pair(lead_nucl = self.lead_nucl.copy(),lag_nucl = self.lag_nucl.copy(),radius=self.radius,charge=self.charge,eps=self.eps,dna_structure=self.dna_structure,geom_params=self.geom_params)
+        new = Base_Pair(lead_nucl=self.lead_nucl.copy(), lag_nucl=self.lag_nucl.copy(),
+                        dna_structure=self.dna_structure, geom_params=self.geom_params)
         new.update_references()
         for name,value in kwards.items():
             setattr(new,name,value)
@@ -128,9 +127,6 @@ class Base_Pair:
 
     lead_nucl_ind = _set_property('lead_nucl_ind')
     lag_nucl_ind = _set_property('lag_nucl_ind')
-    radius = _set_property('radius')
-    charge = _set_property('charge')
-    epsilon = _set_property('epsilon')
     geom_params = _set_property('geom_params')
     
         
@@ -226,15 +222,13 @@ def _fix_missing_pairs(dna_structure,pairs):
 
     return pairs.sort()
     
-def get_pairs(dna_structure,radius=10,charge=-2,eps=0.5):
+def get_pairs(dna_structure):
     '''
     Runs the analysis to determine all pairs of nucleotides for a given structure.
     
     Attributes:
     
     **dna_structure** - DNA_Structure object to analyze.
-    
-    **radius**, **charge**, **eps** - values of parameters to set for each pair.
     
     Returns:
     
@@ -243,8 +237,6 @@ def get_pairs(dna_structure,radius=10,charge=-2,eps=0.5):
     nucleotides = dna_structure.nucleotides
     lead_ind,lag_ind = _get_nucl_in_pairs_ind(nucleotides)
     
-    ln = len(lead_ind)
-    radii,charges,epsilons = [radius]*ln,[charge]*ln,[eps]*ln
     
     geom_params = []
 
@@ -254,7 +246,7 @@ def get_pairs(dna_structure,radius=10,charge=-2,eps=0.5):
         geom_params.append(Geometrical_Parameters(ref_frames = r_frames, origins = ori,
                                                   pair_params=True))
 
-    pairs = Pairs_Storage(Base_Pair,nucleotides,lead_ind,lag_ind,radii,charges,epsilons,geom_params)
+    pairs = Pairs_Storage(Base_Pair,nucleotides,lead_ind,lag_ind,geom_params)
 
     pairs = _fix_missing_pairs(dna_structure,pairs)
 
