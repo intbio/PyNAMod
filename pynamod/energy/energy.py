@@ -96,7 +96,6 @@ class Energy:
         return (elastic2-elastic1,del_electrostatic,del_spatial,restraint2-restraint1),e_mat,s_mat
 
     def _get_circular_restraint(self,restraint_func,CG_structure,scaling_factor):
-        dna_length = CG_structure.dna.radii.shape[0]
         if restraint_func == 'elastic':
             #Might use incorrect pair
             pairtype = CG_structure.dna.pairs_list[0].pair_name[0] + CG_structure.dna.pairs_list[-1].pair_name[1]
@@ -106,8 +105,6 @@ class Energy:
         elif restraint_func == 'linear':
             target = torch.tensor(3.4)
             const = torch.tensor(0.4)
-        self.restraints += [Restraint(0,CG_structure.dna.origins.shape[0]-1,scaling_factor,target,const,en_restr_func=restraint_func)]
-        self.dist_mat_slice[0][0:self.ignore_neighbors,
-                            dna_length - self.ignore_neighbors:dna_length] = torch.tril(torch.ones(
-                                            self.ignore_neighbors,self.ignore_neighbors,dtype=bool),diagonal=-1)   
-        self._mod_real_space_mat()
+        dna_length = len(CG_structure.dna.pairs_list)
+        self.restraints += [Restraint(0, dna_length-1, scaling_factor, target, const, en_restr_func=restraint_func)]
+        self._real_space_calc.update_matrices_for_restraints(dna_length)

@@ -6,7 +6,8 @@ setuptools.setup(
      python_requires=">=3.11",
      packages=setuptools.find_packages(exclude=['examples']),
      data_files=['pynamod/atomic_analysis/classifier.onnx','pynamod/structures/nucleosome_sym.h5'],
-     package_data= {'pynamod':['structures/ref_3spn/*']},
+     package_data= {'pynamod':['structures/ref_cg_pairs/1spn/*',
+                              'structures/ref_cg_pairs/3spn/*']},
      include_package_data=True,
      classifiers=[
         "Programming Language :: Python :: 3",

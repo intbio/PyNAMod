@@ -5,6 +5,7 @@ import subprocess
 import tempfile
 from sklearn.neighbors import KNeighborsClassifier
 
+
 def load_rlspg_from_h5(h5_dataset):
     if 'group_type' in h5_dataset.keys():
         group_type = str(h5_dataset['group_type'])
@@ -19,9 +20,10 @@ def load_rlspg_from_h5(h5_dataset):
     else:
         rlspg = Real_Space_Beads_Groups()
 
-    rlspg.load_from_h5(h5_dataset,group_type=group_type)
+    rlspg.load_from_h5(h5_dataset, group_type=group_type)
     return rlspg
-    
+
+
 class Real_Space_Beads_Groups:
     def __init__(self, n_cg_beads=None, ref_vectors=None, charges=None, masses=None,
                  radii=None, ref_ind=None, eps=1,
@@ -41,12 +43,13 @@ class Real_Space_Beads_Groups:
         self.binded_dna_len = binded_dna_len
         self.cg_structure = cg_structure
 
-    def save_to_h5(self, file, group_name='rlsp_0_CG_parameters', **dataset_kwards):
+    def save_to_h5(self, file, group_name='rlspg_0_CG_parameters', **dataset_kwards):
         group = file.create_group(group_name)
         group.create_dataset('ref_vectors', data=self.ref_vectors, **dataset_kwards)
         group.create_dataset('charges', data=self.charges, **dataset_kwards)
         group.create_dataset('radii', data=self.radii, **dataset_kwards)
         group.create_dataset('eps', data=self.eps, **dataset_kwards)
+        group.create_dataset('masses',data=self.masses, **dataset_kwards)
         group.create_dataset('supdata', data=[self.n_cg_beads, self.ref_ind, self.binded_dna_len], **dataset_kwards)
         group.create_dataset('group_type', data=self.group_type, **dataset_kwards)
 
@@ -59,10 +62,12 @@ class Real_Space_Beads_Groups:
         self.charges = torch.from_numpy(h5_dataset['charges'][:])
         self.radii = torch.from_numpy(h5_dataset['radii'][:])
         self.eps = torch.from_numpy(h5_dataset['eps'][:])
+        if 'masses' in h5_dataset.keys():
+            self.masses = torch.from_numpy(h5_dataset['masses'][:])
         self.n_cg_beads = int(h5_dataset['supdata'][0])
         self.binded_dna_len = int(h5_dataset['supdata'][2])
         self.ref_ind = int(h5_dataset['supdata'][1])
-        
+
     def get_true_pos(self, dna_structure=None, ref_om=None, ref_Rm=None):
         if dna_structure is None:
             dna_structure = self.cg_structure.dna
@@ -79,7 +84,7 @@ class Real_Space_Beads_Groups:
             cg_structure = self.cg_structure
         return type(self)(n_cg_beads=self.n_cg_beads, ref_ind=self.ref_ind,
                        eps=self.eps.clone(), ref_vectors=self.ref_vectors.clone(),
-                       radii=self.radii.clone(), charges=self.charges.clone(),
+                       radii=self.radii.clone(), charges=self.charges.clone(), masses = self.masses.clone(),
                        cg_structure=cg_structure,  binded_dna_len=self.binded_dna_len,group_type=self.group_type)
 
     def to(self, device):

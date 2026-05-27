@@ -23,6 +23,12 @@ class _Real_Space_Energy_Calculator():
         #self.epsilon_mean_prod = self.epsilon_mean_prod.to(device)
         self.charges_multipl_prod = self.charges_multipl_prod.to(device)
 
+    def update_matrices_for_restraints(self):
+        self.dist_mat_slice[0][0:self.ignore_neighbors,
+                    dna_length - self.ignore_neighbors:dna_length] = torch.tril(torch.ones(
+                                    self.ignore_neighbors,self.ignore_neighbors,dtype=bool),diagonal=-1)   
+        self._mod_real_space_mat()
+
     def set_energy_matrices(self,CG_structure, ignore_neighbors, set_dist_mat_sl):
         self.ignore_neighbors = ignore_neighbors
         if set_dist_mat_sl:
@@ -143,22 +149,22 @@ class _Real_Space_Energy_Calculator():
         dist_matrix = dist_matrix[self.dist_mat_slice]
         radii_sum_prod = self.radii_sum_prod[self.dist_mat_slice]**2
         energy = self.K_free*(((radii_sum_prod/(dist_matrix**2+0.0001*radii_sum_prod))**6).sum())
-        return torch.tensor(0,device = self.radii_sum_prod.device),energy
+        return torch.tensor(0, device = self.radii_sum_prod.device),energy
 
-    def _get_electrostatic_e(self,dist_matrix,charges_multipl_prod):
+    def _get_electrostatic_e(self, dist_matrix, charges_multipl_prod):
         div = charges_multipl_prod/dist_matrix
         exp = (self.k_deb*dist_matrix).exp()
         e_mat = div*exp*self.K_elec
-        return e_mat.sum(),e_mat
+        return e_mat.sum(), e_mat
 
-    def _get_spatial_e(self,dist_matrix,radii_sum_prod):
+    def _get_spatial_e(self, dist_matrix, radii_sum_prod):
         comp = (radii_sum_prod/dist_matrix).pow(6)
         s_mat = comp.pow(2).sub(comp)*self.K_free
-        return s_mat.sum(),s_mat
+        return s_mat.sum(), s_mat
 
-    def _cdist(self,o1,o2):
-        o1 = o1.reshape(-1,3)
-        o2 = o2.reshape(-1,3)
+    def _cdist(self, o1, o2):
+        o1 = o1.reshape(-1, 3)
+        o2 = o2.reshape(-1, 3)
         n = o1.size(0)
         m = o2.size(0)
 
@@ -167,3 +173,9 @@ class _Real_Space_Energy_Calculator():
         dist_mat = torch.pow(o2 - o1, 2).sum(2)
 
         return dist_mat.sqrt()
+
+    def update_matrices_for_restraints(self,dna_length):
+        self.dist_mat_slice[0:self.ignore_neighbors,
+                        dna_length - self.ignore_neighbors:dna_length] = torch.tril(torch.ones(
+                                        self.ignore_neighbors,self.ignore_neighbors,dtype=bool),diagonal=-1)   
+        self._mod_real_space_mat()

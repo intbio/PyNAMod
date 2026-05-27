@@ -117,6 +117,7 @@ class Tensor_Trajectory(Trajectory):
 
         return new
 
+
 class H5_Trajectory(Trajectory):
     def __init__(self,filename,data_len,mode='r',attrs_names=None,shapes=None,string_format_val=5,**kwards):
         if shapes:
@@ -206,6 +207,9 @@ class H5_Trajectory(Trajectory):
     def __len__(self):
         return self._last_frame_ind + 1
 
+    def __del__(self):
+        self.file.close()
+
     def get_attr_trajectory(self,attr,start=0,stop=None,step=1):
         attr_traj = np.zeros((self._last_frame_ind+1,*self.shapes[self.attrs_names.index(attr)]))
         if stop is None:
@@ -228,8 +232,6 @@ class H5_Trajectory(Trajectory):
                 
         return energy_arr
         
-        
-    
     bend_energies = property(fget=lambda self:self.get_energies_arr(0))
     elst_energies = property(fget=lambda self:self.get_energies_arr(1))
     ld_energies = property(fget=lambda self:self.get_energies_arr(2))

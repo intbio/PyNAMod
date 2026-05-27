@@ -78,7 +78,7 @@ class CG_Structure:
         if len(trajectory) != 0:
             self.dna.analyze_trajectory(trajectory)
 
-        self._add_nucleotides()
+        self._add_nucleotides('from_atomic')
 
     def build_dna(self, sequence, movable=True):
         '''Method that runs generation of linear DNA structure with given sequence. Each pair of nucleotides and each step of pairs gains similar average BDNA parameters.
@@ -93,7 +93,7 @@ class CG_Structure:
             raise ValueError('DNA was already initialized for this CG Structure.')
 
         self.dna.generate(sequence, movable=movable)
-        self._add_nucleotides()
+        self._add_nucleotides('generated')
 
     def save_to_h5(self, file, **dataset_kwards):
         self.dna.save_to_h5(file, **dataset_kwards)
@@ -113,6 +113,8 @@ class CG_Structure:
         
         if f'{class_name}_{str(0).zfill(frt)}_CG_parameters' not in file.keys():
             frt = 1
+            if f'{class_name}_{str(0).zfill(frt)}_CG_parameters' not in file.keys():
+                class_name = 'rlsp'
             if f'{class_name}_{str(0).zfill(frt)}_CG_parameters' not in file.keys():
                 class_name = 'protein'
             
@@ -158,11 +160,11 @@ class CG_Structure:
             self._rlsp_groups.append(group)
             if group.group_type == 'Protein':
                 self._proteins.append(group)
-        
+
         self._proteins = sorted(self._proteins, key=lambda p: p.ref_ind)
         self._rlsp_groups = sorted(self._rlsp_groups, key=lambda p: p.ref_ind)
-        
-    def get_cg_mda_traj(self, allign_sel='all'):
+
+    def get_cg_mda_traj(self,traj_step=None, allign_sel='all'):
         '''Method that creates trajectory of CG model as a mda Universe.
 
             Arguments:
@@ -187,9 +189,14 @@ class CG_Structure:
 
         resids = np.arange(n_parts)
         coords = []
+        if traj_step is not None:
+            old_step = self.dna.trajectory.traj_step
+            self.dna.trajectory.traj_step = traj_step
         for ts in self.dna.trajectory:
             frame_coord = torch.tensor(self.origins.reshape(1,-1,3))
             coords.append(frame_coord)
+        if traj_step is not None:
+            self.dna.trajectory.traj_step = old_step
         coords = torch.cat(coords).numpy()
         segid_names = ['D'] + [f'P{i}' for i in range(len(self.proteins))]
         u = mda.Universe.empty(n_parts,n_residues=n_parts,n_segments=len(segid_names),
@@ -279,17 +286,17 @@ class CG_Structure:
         for group in self.rlsp_groups:
             group.to(device)
 
-    def _add_nucleotides(self):
+    def _add_nucleotides(self,model_origin):
         '''Supported models:
         - 1spbp
         - 1spn
         - 3spn
         '''
-        nucleotide_creator = Nucleotide_Creator(self.nucleotides_model)
+        nucleotide_creator = Nucleotide_Creator(f'{self.nucleotides_model}_{model_origin}')
         nucleotides_groups = []
         for pair in self.dna.pairs_list:
             ind = pair.ind
-            pair_beads = nucleotide_creator.create(ind, self.dna.origins[ind], self.dna.ref_frames[ind])
+            pair_beads = nucleotide_creator.create(pair, self.dna.origins[ind], self.dna.ref_frames[ind])
             pair_beads.cg_structure = self
             nucleotides_groups.append(pair_beads)
 
@@ -309,6 +316,9 @@ class CG_Structure:
 
         return it
 
+    def __repr__(self):
+        return f'<CG Structure with {len(self.dna.pairs_list)} DNA pairs and {len(self.proteins)} protein{'s' if len(self.proteins) != 1 else ''}>'
+
     @property
     def origins(self):
         if 'rlsp_origins' in self.dna.trajectory.attrs_names:
@@ -327,6 +337,10 @@ class CG_Structure:
     @property
     def charges(self):
         return torch.cat([group.charges for group in self.rlsp_groups])
+
+    @property
+    def masses(self):
+        return torch.cat([group.masses for group in self.rlsp_groups])
 
     @property
     def rlsp_groups(self):

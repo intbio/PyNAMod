@@ -252,7 +252,7 @@ class DNA_Structure:
     def _getter(self, attr):
         return getattr(self.geom_params, attr)
 
-    def _setter(self,value, attr):
+    def _setter(self, value, attr):
         setattr(self.geom_params, attr, value)
 
     def _set_property(attr):
@@ -275,7 +275,7 @@ class DNA_Structure:
         self.geom_params.origins = value
 
     def __repr__(self):
-        return f'<DNA structure with {len(self.pairs_list)} nucleotide pairs>'
+        return f'<DNA Structure with {len(self.pairs_list)} nucleotide pairs>'
 
     def __getitem__(self, sl):
         ''''''
