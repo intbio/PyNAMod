@@ -27,12 +27,26 @@ class _OnnxPairClassifier:
         )
         self._iname = self._sess.get_inputs()[0].name
         onames = [o.name for o in self._sess.get_outputs()]
-        label_name = next((n for n in onames if 'label' in n.lower()), onames[0])
-        self._oname = label_name
+        self._label_name = next((n for n in onames if 'label' in n.lower()), None)
+        self._prob_name = next((n for n in onames if 'prob' in n.lower()), None)
+        if self._label_name is None and self._prob_name is None:
+            self._label_name = onames[0]
 
     def predict(self, X):
         x = np.asarray(X, dtype=np.float32)
-        y = self._sess.run([self._oname], {self._iname: x})[0]
+        output_names = []
+        if self._prob_name is not None:
+            output_names.append(self._prob_name)
+        if self._label_name is not None:
+            output_names.append(self._label_name)
+        outputs = self._sess.run(output_names, {self._iname: x})
+        if self._prob_name is not None:
+            # ORT 1.26 can return a wrong label for TreeEnsembleClassifier while probabilities stay usable.
+            probs = np.asarray(outputs[0], dtype=np.float32)
+            if probs.ndim == 2 and probs.shape[1] >= 2:
+                return (probs[:, 1] > 0.5).reshape(-1)
+            return (probs > 0.5).astype(bool).reshape(-1)
+        y = np.asarray(outputs[-1])
         if y.dtype.kind == 'f':
             return (y > 0.5).astype(bool).reshape(-1)
         return y.astype(bool).reshape(-1)
