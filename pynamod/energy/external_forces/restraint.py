@@ -21,7 +21,7 @@ class Restraint:
         o1 = intg_trajectory.origins[self.pair1_index]
         o2 = intg_trajectory.origins[self.pair2_index]
         dist = (o1-o2).norm()
-        return self.force_constant*dist/self.param_constant
+        return self.force_constant*(dist-self.target_value)/self.param_constant
 
     def _get_elastic_restraint_energy(self, intg_trajectory):
 
