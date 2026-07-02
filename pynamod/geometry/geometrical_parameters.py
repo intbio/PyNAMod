@@ -4,6 +4,7 @@ from pynamod.geometry.trajectories import Tensor_Trajectory, H5_Trajectory
 from pynamod.geometry.bp_step_geometry import Geometry_Functions
 from pynamod.geometry.tensor_subclasses import mod_Tensor
 
+
 class Geometrical_Parameters(Geometry_Functions):
     def __init__(self,local_params = None, ref_frames = None, origins = None,trajectory=None,traj_len=1,pair_params=False,auto_rebuild=True,empty=False):
 

@@ -86,12 +86,12 @@ class Structures_Storage:
                     item = getattr(self, self.get_name(attr))[sl]
                     item_attrs.append(item)
 
-            elif self.__sl_isintance(sl[0],(bool, np.bool_)):
+            elif self.__sl_isintance(sl[0], (bool, np.bool_)):
 
                 for attr in self.structure_attrs_list:
-                    attr_val = getattr(self,self.get_name(attr))
+                    attr_val = getattr(self, self.get_name(attr))
 
-                    if isinstance(attr_val,torch.Tensor):
+                    if isinstance(attr_val, torch.Tensor):
                         item = attr_val[sl]
                     else:
                         item = [attr_val[i] for i,bl in enumerate(sl) if bl]

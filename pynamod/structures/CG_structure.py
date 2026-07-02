@@ -1,11 +1,12 @@
 import MDAnalysis as mda
-import io
+from io import StringIO
 import pypdb
 import nglview as nv
 import torch
 import numpy as np
 import matplotlib as mpl
 import h5py
+from Bio.PDB import MMCIFParser, PDBIO
 from importlib.resources import files
 from MDAnalysis.topology.guessers import guess_atom_element
 from MDAnalysis.coordinates.memory import MemoryReader
@@ -13,9 +14,7 @@ from MDAnalysis.analysis import align
 import matplotlib.pyplot as plt
 from pynamod.structures.DNA_structure import DNA_Structure
 from pynamod.structures.rlsp_group import Protein, load_rlspg_from_h5
-
 from pynamod.structures.nucleotides_models import Nucleotide_Creator
-
 
 class CG_Structure:
     '''CG_Structure is one of the main classes of PyNAMod package. It contains DNA structure and proteins structures that are attached to it. It supports analysis and generation, summation, visualization of CG structures. Slices of this class return CG structure with DNA that includes nucleotide pairs with indexes in slice and proteins that have reference pair in sliced structure.
@@ -36,9 +35,20 @@ class CG_Structure:
         if mdaUniverse:
             self.u = mdaUniverse
         elif pdb_id:
-            self.u = mda.Universe(io.StringIO(pypdb.pdb_client.get_pdb_file(pdb_id)), format='PDB')
+            self.u = mda.Universe(StringIO(pypdb.pdb_client.get_pdb_file(pdb_id)), format='PDB')
         elif file:
-            self.u = mda.Universe(file)
+            if file[-3:] in ('cif','mmcif','pdbx'):
+                pdb_buffer = StringIO()
+                parser = MMCIFParser()
+                structure = parser.get_structure("structure", file)
+
+                pdbio = PDBIO()
+                pdbio.set_structure(structure)
+                pdbio.save(pdb_buffer)
+                _ = pdb_buffer.seek(0)
+                self.u = mda.Universe(pdb_buffer, format='PDB')
+            else:
+                self.u = mda.Universe(file)
         else:
             self.u = None
         if self.u:
@@ -67,7 +77,7 @@ class CG_Structure:
             **movable** - boolean default value to set for each step for Carlo Simulations.
         '''
 
-        if self.dna.pairs_list and not overwrite_existing_dna:
+        if self.dna.pairs and not overwrite_existing_dna:
             raise ValueError('DNA was already analyzed for this CG Structure. Use overwrite_existing_dna to proceed anyway.')
 
         if trajectory is None:
@@ -89,7 +99,7 @@ class CG_Structure:
 
             **movable** - boolean default value to set for each step for Carlo Simulations.
             '''
-        if self.dna.pairs_list:
+        if self.dna.pairs:
             raise ValueError('DNA was already initialized for this CG Structure.')
 
         self.dna.generate(sequence, movable=movable)
@@ -110,14 +120,14 @@ class CG_Structure:
         loaded_groups = []
         frt = len(str(len(file.keys())))
         class_name = 'rlspg'
-        
+
         if f'{class_name}_{str(0).zfill(frt)}_CG_parameters' not in file.keys():
             frt = 1
             if f'{class_name}_{str(0).zfill(frt)}_CG_parameters' not in file.keys():
                 class_name = 'rlsp'
             if f'{class_name}_{str(0).zfill(frt)}_CG_parameters' not in file.keys():
                 class_name = 'protein'
-            
+
         for i in range(len(file)-1):
             group_name = f'{class_name}_{str(i).zfill(frt)}_CG_parameters'
             group = load_rlspg_from_h5(file[group_name])
@@ -140,14 +150,14 @@ class CG_Structure:
             **ref_index** - index of nucleotide pair relative to which position of protein is defined. Note that selection of reference pair is important for slicing, as all proteins without reference pair after slice are dropped from the sliced structure.
             '''
         if not ref_ind:
-            ref_ind = len(self.dna.pairs_list)//2
+            ref_ind = len(self.dna.pairs)//2
         if protein_u is None:
             protein_u = self.u.select_atoms('protein')
             if hasattr(protein_u, 'altLocs'):
                 protein_u = protein_u[protein_u.altLocs == '']
 
         if binded_dna_len is None:
-            binded_dna_len = len(self.dna.pairs_list)
+            binded_dna_len = len(self.dna.pairs)
 
         new = Protein(mdaUniverse = protein_u, n_cg_beads=n_cg_beads,
                       ref_ind=ref_ind, binded_dna_len=binded_dna_len)
@@ -231,11 +241,11 @@ class CG_Structure:
         if not max_charge:
             max_charge = all_charges.abs().max().ceil().item()
         norm = mpl.colors.Normalize(-max_charge, max_charge)
-        cb = mpl.colorbar.Colorbar(ax, orientation='horizontal', 
-                                       cmap='bwr_r',
-                                       norm=norm,
-                                       label='charge',
-                                       ticks=[-max_charge,0,max_charge])
+        cb = mpl.colorbar.Colorbar(ax, orientation='horizontal',
+                                    cmap='bwr_r',
+                                    norm=norm,
+                                    label='charge',
+                                    ticks=[-max_charge,0,max_charge])
 
         colors = np.array([cb.cmap(norm(c))[:3] for c in self.charges]).flatten().tolist()
         view.shape.add_buffer('sphere',position=self.origins.flatten().tolist(),
@@ -256,13 +266,13 @@ class CG_Structure:
         structures = [structure.copy() for structure in structures]
         self._proteins += [protein for structure in structures for protein in structure.proteins]
         self._rlsp_groups += [group for structure in structures for group in structure.rlsp_groups]
-        update_value = len(self.dna.pairs_list)
+        update_value = len(self.dna.pairs)
         self.dna.append_structures([structure.dna for structure in structures], copy=False)
         for structure in structures:
             for group in structure.rlsp_groups:
                 group.cg_structure = self
                 group.ref_ind = group.ref_ind+update_value
-            update_value += len(structure.dna.pairs_list)
+            update_value += len(structure.dna.pairs)
 
         return self
 
@@ -286,7 +296,7 @@ class CG_Structure:
         for group in self.rlsp_groups:
             group.to(device)
 
-    def _add_nucleotides(self,model_origin):
+    def _add_nucleotides(self, model_origin):
         '''Supported models:
         - 1spbp
         - 1spn
@@ -294,7 +304,7 @@ class CG_Structure:
         '''
         nucleotide_creator = Nucleotide_Creator(f'{self.nucleotides_model}_{model_origin}')
         nucleotides_groups = []
-        for pair in self.dna.pairs_list:
+        for pair in self.dna.pairs:
             ind = pair.ind
             pair_beads = nucleotide_creator.create(pair, self.dna.origins[ind], self.dna.ref_frames[ind])
             pair_beads.cg_structure = self
@@ -304,20 +314,26 @@ class CG_Structure:
 
     def __getitem__(self, sl):
         it = self.copy()
-        it.dna.__getitem__(sl)
+        it.dna = it.dna[sl]
         rlsp_groups = []
-        for group in it.rlsp_groups:
-            if group.ref_pair in it.dna.pairs_list:
-                rlsp_groups.append(group)
-                if sl.step < 0:
-                    group.ref_vectors *= -1
 
-        it.rlsp_groups = rlsp_groups
+        start, stop, step = sl.indices(len(self.rlsp_groups))
+        sl_inds = list(range(start, stop, step))
+        for group in it.rlsp_groups:
+            if group.ref_ind in sl_inds:
+                if step < 0:
+                    group.ref_vectors *= -1
+                group.ref_ind //= step
+                rlsp_groups.append(group)
+
+        it._proteins = []
+        it._rlsp_groups = []
+        it.add_rlsp_groups(rlsp_groups)
 
         return it
 
     def __repr__(self):
-        return f'<CG Structure with {len(self.dna.pairs_list)} DNA pairs and {len(self.proteins)} protein{'s' if len(self.proteins) != 1 else ''}>'
+        return f'<CG Structure with {len(self.dna.pairs)} DNA pairs and {len(self.proteins)} protein{'s' if len(self.proteins) != 1 else ''}>'
 
     @property
     def origins(self):

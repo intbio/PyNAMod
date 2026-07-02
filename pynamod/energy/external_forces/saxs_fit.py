@@ -22,7 +22,7 @@ class SAXS_Fit:
     def get_total_dz_list(self,cgs):
         dz_list = []
         ref_ind_list = []
-        for pair in cgs.dna.pairs_list:
+        for pair in cgs.dna.pairs:
             for n in (pair.lead_nucl,pair.lag_nucl):
                 nucl_u = cgs.u.select_atoms(f'resid {n.resid} and segid {n.segid}')
                 dz = self.get_coarse_bead_dZ(nucl_u)

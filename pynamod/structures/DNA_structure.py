@@ -1,13 +1,12 @@
 import pandas as pd
 import numpy as np
 import torch
-import io
 from Bio.Seq import Seq
 from tqdm.auto import tqdm
 from pynamod.geometry.trajectories import H5_Trajectory, Tensor_Trajectory
 from pynamod.energy.energy_constants import get_consts_olson_98, BDNA_step
 from pynamod.geometry.geometrical_parameters import Geometrical_Parameters
-from pynamod.atomic_analysis.nucleotides_parser import get_all_nucleotides, Nucleotide, get_base_ref_frame, get_base_u
+from pynamod.atomic_analysis.nucleotides_parser import get_all_nucleotides, Nucleotide, get_base_ref_frame
 from pynamod.atomic_analysis.pairs_parser import get_pairs, Base_Pair
 from pynamod.atomic_analysis.structures_storage import Nucleotides_Storage, Pairs_Storage
 from pynamod.geometry.tensor_subclasses import mod_Tensor
@@ -18,14 +17,26 @@ class DNA_Structure:
 
         Main attributes of this class are:
 
-        - **pairs_list** - list of Pair class objects. 
+        - **pairs** - list of Pair class objects. 
         - **origins**, **ref_frames**, **step_params** - properties that return tensors from All_Coords class with parameters for this DNA structure.'''
 
-    def __init__(self, **kwards):
-        self.pairs_list = []
-        self.movable_steps = torch.empty(0,dtype=bool)
-        for name,value in kwards.items():
-            setattr(self, name, value)
+    def __init__(self, u=None, nucleotides=None,
+                    pairs=None, geom_params=None, movable_steps=None):
+
+        self.u = u
+        self.geom_params = geom_params
+
+        if nucleotides is None:
+            nucleotides = Nucleotides_Storage(Nucleotide,None)
+        self.nucleotides = nucleotides
+
+        if pairs is None:
+            pairs = Pairs_Storage(Base_Pair,self.nucleotides)
+        self.pairs = pairs
+
+        if movable_steps is None:
+            movable_steps = torch.empty(0,dtype=bool)
+        self.movable_steps = movable_steps
 
     def build_from_u(self, leading_strands,pairs_in_structure = None,traj_len=1,
                      sel='(type C or type O or type N) and not protein',overwrite_existing_dna=False,movable=False,use_full_nucleotide=False):
@@ -37,37 +48,36 @@ class DNA_Structure:
         if pairs_in_structure is not None:
             self.parse_pairs(pairs_in_structure)
         else:
-            self.pairs_list = get_pairs(self)
+            self.pairs = get_pairs(self)
 
-        if len(self.pairs_list) == 0:
+        if len(self.pairs) == 0:
             raise RuntimeError('No pairs were found')
 
-        self.get_geom_params(traj_len,overwrite_existing_dna)
-        self.movable_steps = torch.full((len(self.pairs_list),),movable)
+        self.get_geom_params(traj_len, overwrite_existing_dna)
+        self.movable_steps = torch.full((len(self.pairs),), movable)
 
-    def get_geom_params(self,traj_len=1,overwrite_existing_dna=False):
+    def get_geom_params(self, traj_len=1, overwrite_existing_dna=False):
         '''This method prepairs reference frames and orgins frim pairs, than creates object of All_Coords or updates existing one.'''
-        ref_frames = torch.stack([pair.Rm for pair in self.pairs_list])
+        ref_frames = torch.stack([pair.Rm for pair in self.pairs])
 
-        origins = torch.vstack([pair.om for pair in self.pairs_list]).reshape(-1,1,3)
-        if hasattr(self,'geom_params') and not overwrite_existing_dna:
+        origins = torch.vstack([pair.om for pair in self.pairs]).reshape(-1, 1, 3)
+        if self.geom_params is not None and not overwrite_existing_dna:
             self.geom_params.get_new_params_set(ref_frames=ref_frames,origins=origins)
         else:
             self.geom_params = Geometrical_Parameters(ref_frames=ref_frames,origins=origins,traj_len = traj_len)
 
-    def generate(self,sequence,radius=10,charge=-2,eps=0.5,movable=True):
+    def generate(self, sequence, radius=10, charge=-2, eps=0.5, movable=True):
         '''This method is called by CG_Structure.build_dna and creates linear DNA based on given sequence and BDNA step.'''
         sequence = sequence.upper()
         rev_sequence = Seq(sequence).reverse_complement()
         ln = len(sequence)
 
-        self.nucleotides = Nucleotides_Storage(Nucleotide,None)
         self.nucleotides.restypes = list(sequence+rev_sequence[::-1])
         self.nucleotides.resids = list(range(ln))*2
         self.nucleotides.segids = ['A']*ln + ['B']*ln
         self.nucleotides.leading_strands = [True]*ln + [False]*ln
-        self.nucleotides.ref_frames = torch.zeros(ln,3,3,dtype=torch.double)
-        self.nucleotides.origins = torch.zeros(ln,1,3,dtype=torch.double)
+        self.nucleotides.ref_frames = torch.zeros(ln, 3, 3, dtype=torch.double)
+        self.nucleotides.origins = torch.zeros(ln, 1, 3, dtype=torch.double)
         self.nucleotides.s_residues = [None]*(ln*2)
         self.nucleotides.e_residues = [None]*(ln*2)
         self.nucleotides.base_pairs = [None]*(ln*2)
@@ -82,22 +92,22 @@ class DNA_Structure:
         #     res_atoms.atoms.positions = torch.matmul(st_positions,ref_frame.T) + origin
         #     self.nucleotides.res_atomss.append(res_atoms)
 
-        self.pairs_list = Pairs_Storage(Base_Pair,self.nucleotides)
-        self.pairs_list.lead_nucl_inds = list(range(ln))
-        self.pairs_list.lag_nucl_inds = [i+ln for i in range(ln)]
-        pair_params = torch.zeros(2,6,dtype=torch.double)
+        self.pairs = Pairs_Storage(Base_Pair, self.nucleotides)
+        self.pairs.lead_nucl_inds = list(range(ln))
+        self.pairs.lag_nucl_inds = [i+ln for i in range(ln)]
+        pair_params = torch.zeros(2, 6, dtype=torch.double)
         pair_params[1] = torch.from_numpy(BDNA_step[:6])
-        self.pairs_list.geom_paramss = [Geometrical_Parameters(local_params=pair_params.clone()) for i in range(ln)]
+        self.pairs.geom_params = [Geometrical_Parameters(local_params=pair_params.clone()) for i in range(ln)]
 
-        step_params = torch.zeros(ln,6,dtype=torch.double)
+        step_params = torch.zeros(ln, 6, dtype=torch.double)
         averages = get_consts_olson_98()[0]
-        for i in range(1,ln):
+        for i in range(1, ln):
             step_params[i] = torch.from_numpy(averages[sequence[i-1]+sequence[i]])
 
         self.geom_params = Geometrical_Parameters(local_params=step_params)
-        self.movable_steps = torch.full((len(self.pairs_list),), movable)
+        self.movable_steps = torch.full((len(self.pairs),), movable)
 
-    def analyze_trajectory(self,trajectory):
+    def analyze_trajectory(self, trajectory):
         '''Runs analysis of all frames in trajectory based on previously generated pairs list.'''
         try:
             for ts in tqdm(trajectory):
@@ -107,8 +117,8 @@ class DNA_Structure:
                     R,o = get_base_ref_frame(self.nucleotides.s_residues[i],self.nucleotides.e_residues[i])
                     self.nucleotides.ref_frames[i] = R
                     self.nucleotides.origins[i] = o
-                for pair in self.pairs_list:
-                     pair.get_pair_params()
+                for pair in self.pairs:
+                    pair.get_pair_params()
                 self.get_geom_params()
         except KeyboardInterrupt:
             pass
@@ -128,25 +138,24 @@ class DNA_Structure:
             Default values - BDNA step.
 
             **copy** - If True - copies all given structures. Default - True.'''
-        if hasattr(self,'geom_params'):
+        if self.geom_params is not None:
             step_params = self.step_params.clone()
         else:
-            step_params = torch.empty((0,6),dtype=torch.double)
+            step_params = torch.empty((0, 6), dtype=torch.double)
         if copy:
             structures = [structure.copy() for structure in structures]
         ln = len(self.nucleotides)
         for structure in structures:
             structure.geom_params._auto_rebuild_sw = False
             structure.step_params[0,:] = first_step_params
-            step_params = torch.cat([step_params,structure.step_params])
+            step_params = torch.cat([step_params, structure.step_params])
 
-            for i in range(len(structure.pairs_list)):
-                structure.pairs_list.lead_nucl_inds[i] += ln
-                structure.pairs_list.lag_nucl_inds[i] += ln
-            self.pairs_list += structure.pairs_list
+            for i in range(len(structure.pairs)):
+                structure.pairs.lead_nucl_inds[i] += ln
+                structure.pairs.lag_nucl_inds[i] += ln
+            self.pairs += structure.pairs
             self.nucleotides += structure.nucleotides
-            structure.geom_params._auto_rebuild_sw = structure.geom_params.auto_rebuild
-        self.pairs_list.nucleotides_storage = self.nucleotides
+        self.pairs.nucleotides_storage = self.nucleotides
         step_params[0] = torch.zeros(6)
         self.geom_params = Geometrical_Parameters(local_params=step_params)
         self.movable_steps = torch.cat([self.movable_steps]+[structure.movable_steps for structure in structures])
@@ -154,15 +163,17 @@ class DNA_Structure:
 
         return self
 
-    def transfer_trajectory_to_h5(self, filename,mode='r+',keep_single_old_frame=None,**datasets_kwards):
+    def transfer_trajectory_to_h5(self, filename,mode='r+',keep_single_old_frame=None,chunk_size=10,**datasets_kwards):
         old_traj = self.geom_params.trajectory
-        self.geom_params.trajectory = H5_Trajectory(filename, len(self.pairs_list),mode=mode,**datasets_kwards)
+        self.geom_params.trajectory = H5_Trajectory(filename, len(self.pairs),
+                                                    chunk_size=chunk_size,
+                                                    mode=mode,**datasets_kwards)
         if keep_single_old_frame is not None:
             old_traj.cur_step = keep_single_old_frame
             for attr in self.geom_params.trajectory.attrs_names:
                 setattr(self.geom_params.trajectory,attr,getattr(old_traj,attr))
         elif mode != 'r' and mode != 'r+':
-            self.geom_params.trajectory.extend(old_traj)
+            self.geom_params.trajectory.add_frames(other_traj = old_traj)
         if isinstance(old_traj,H5_Trajectory):
             old_traj.file.close()
 
@@ -193,7 +204,7 @@ class DNA_Structure:
 
             pandas.DataFrame object'''
         pairs_data = [(pair.lead_nucl.resid,pair.lead_nucl.segid,pair.lead_nucl.restype,
-              pair.lag_nucl.restype,pair.lag_nucl.segid,pair.lag_nucl.resid) for pair in self.pairs_list]
+              pair.lag_nucl.restype,pair.lag_nucl.segid,pair.lag_nucl.resid) for pair in self.pairs]
         labels = ['resid1','segid1','restype1','restype2','segid2','resid2']
         df = pd.DataFrame(pairs_data,columns = labels)
         labels = ['Shear','Stretch','Stagger','Buckle','Prop-Tw','Opening','Shift','Slide','Rise','Tilt','Roll','Twist']
@@ -207,14 +218,14 @@ class DNA_Structure:
         new = DNA_Structure()
         new.movable_steps = self.movable_steps.clone()
         new.geom_params = self.geom_params.copy()
-        new.pairs_list = self.pairs_list.copy()
+        new.pairs = self.pairs.copy()
         new.nucleotides = self.nucleotides.copy()
 
         return new
 
     def parse_pairs(self,pairs_in_structure):
         '''Is called in analyze_dna method if list of pairs is provided. Creates a pair list based on given information.'''
-        self.pairs_list = Pairs_Storage(Base_Pair,self.nucleotides)
+        self.pairs = Pairs_Storage(Base_Pair,self.nucleotides)
         for pair_data in pairs_in_structure:
             resid1,segid1,resid2,segid2 = pair_data
 
@@ -222,14 +233,14 @@ class DNA_Structure:
 
             nucl2 = self.nucleotides[[s==segid2 and r==resid2 for s,r in zip(self.nucleotides.segids,self.nucleotides.resids)]]
 
-            new_base_pair = Base_Pair(self.pairs_list,
+            new_base_pair = Base_Pair(self.pairs,
                                       lead_nucl=nucl1, lag_nucl=nucl2)
             new_base_pair.get_pair_params()
 
     def save_to_h5(self,file,**dataset_kwards):
         group = file.create_group('DNA_data')
         self.nucleotides.save_to_h5(group,'nucleotides',**dataset_kwards)
-        self.pairs_list.save_to_h5(group,'pairs',**dataset_kwards)
+        self.pairs.save_to_h5(group,'pairs',**dataset_kwards)
         group.create_dataset('step_params',data=self.step_params,**dataset_kwards)
         group.create_dataset('origins',data=self.origins,**dataset_kwards)
         group.create_dataset('ref_frames',data=self.ref_frames,**dataset_kwards)
@@ -239,9 +250,9 @@ class DNA_Structure:
         data = file['DNA_data']
 
         self.nucleotides = Nucleotides_Storage(Nucleotide,self.u)
-        self.pairs_list = Pairs_Storage(Base_Pair,self.nucleotides)
+        self.pairs = Pairs_Storage(Base_Pair,self.nucleotides)
 
-        self.pairs_list.load_from_h5(data,'pairs')
+        self.pairs.load_from_h5(data,'pairs')
         self.nucleotides.load_from_h5(data,'nucleotides')
         self.geom_params = Geometrical_Parameters(local_params=torch.tensor(data['step_params']),
                                                  origins = torch.tensor(data['origins']),
@@ -271,16 +282,18 @@ class DNA_Structure:
         return self.geom_params.origins
 
     @origins.setter
-    def origins(self,value):
+    def origins(self, value):
         self.geom_params.origins = value
 
     def __repr__(self):
-        return f'<DNA Structure with {len(self.pairs_list)} nucleotide pairs>'
+        return f'<DNA Structure with {len(self.pairs)} nucleotide pairs>'
 
     def __getitem__(self, sl):
-        ''''''
-        attrs = self.__dict__.copy()
-        for attr in ('pairs_list', 'geom_params'):
-            attrs[attr] = getattr(self,attr)[sl]
-
-        return DNA_Structure(**attrs)
+        nucleotides = Nucleotides_Storage(Nucleotide,None)
+        pairs = self.pairs[sl]
+        for pair in pairs:
+            nucleotides.append(pair.lead_nucl)
+            nucleotides.append(pair.lag_nucl)
+        nucleotides.sort('leading_strand', 'resid')
+        return DNA_Structure(u=self.u, nucleotides=nucleotides,
+                    pairs=pairs, geom_params=self.geom_params[sl], movable_steps=self.movable_steps[sl])

@@ -1,6 +1,7 @@
 import unittest
 import h5py
 import torch
+
 import pynamod
 
 
@@ -16,10 +17,10 @@ class Test_Runner(unittest.TestCase):
         file = h5py.File('tests/cg_3lz0.h5', 'r')
         self.correct_cgs.load_from_h5(file)
 
-        res1 = self.correct_cgs.dna.nucleotides[self.correct_cgs.dna.pairs_list.lead_nucl_inds].resids
-        seg1 = self.correct_cgs.dna.nucleotides[self.correct_cgs.dna.pairs_list.lead_nucl_inds].segids
-        res2 = self.correct_cgs.dna.nucleotides[self.correct_cgs.dna.pairs_list.lag_nucl_inds].resids
-        seg2 = self.correct_cgs.dna.nucleotides[self.correct_cgs.dna.pairs_list.lag_nucl_inds].segids
+        res1 = self.correct_cgs.dna.nucleotides[self.correct_cgs.dna.pairs.lead_nucl_inds].resids
+        seg1 = self.correct_cgs.dna.nucleotides[self.correct_cgs.dna.pairs.lead_nucl_inds].segids
+        res2 = self.correct_cgs.dna.nucleotides[self.correct_cgs.dna.pairs.lag_nucl_inds].resids
+        seg2 = self.correct_cgs.dna.nucleotides[self.correct_cgs.dna.pairs.lag_nucl_inds].segids
 
         data = [[res1[i], seg1[i], res2[i], seg2[i]] for i in range(len(res1))]
 
@@ -27,8 +28,6 @@ class Test_Runner(unittest.TestCase):
 
         self.cgs_loaded_pairs.analyze_dna(leading_strands=['I'],pairs_in_structure=data)
         self.cgs_loaded_pairs.analyze_protein(n_cg_beads=80)
-
-        self.cgs.dna.move_to_coord_center()
         self.cgs_loaded_pairs.dna.move_to_coord_center()
 
     def test_nucleotides(self):
@@ -46,18 +45,18 @@ class Test_Runner(unittest.TestCase):
 
     def test_pairs(self):
 
-        assert len(self.cgs.dna.pairs_list) == len(self.correct_cgs.dna.pairs_list), 'wrong number of pairs in CG structure'
-        assert len(self.cgs_loaded_pairs.dna.pairs_list) == len(self.correct_cgs.dna.pairs_list), 'wrong number of pairs in CG structure with loaded pairs'
+        assert len(self.cgs.dna.pairs) == len(self.correct_cgs.dna.pairs), f'wrong number of pairs in CG structure, ({len(self.cgs.dna.pairs)} instead of {len(self.correct_cgs.dna.pairs)})'
+        assert len(self.cgs_loaded_pairs.dna.pairs) == len(self.correct_cgs.dna.pairs), f'wrong number of pairs in CG structure with loaded pairs, ({len(self.cgs_loaded_pairs.dna.pairs)} instead of {len(self.correct_cgs.dna.pairs)})'
 
-        test_ref_frames = torch.vstack([p.geom_params.ref_frames[1].reshape(-1,3,3) for p in self.cgs.dna.pairs_list])
-        correct_ref_frames = torch.vstack([p.geom_params.ref_frames[1].reshape(-1,3,3) for p in self.correct_cgs.dna.pairs_list])
+        test_ref_frames = torch.vstack([p.geom_params.ref_frames[1].reshape(-1,3,3) for p in self.cgs.dna.pairs])
+        correct_ref_frames = torch.vstack([p.geom_params.ref_frames[1].reshape(-1,3,3) for p in self.correct_cgs.dna.pairs])
 
         ref_dif = test_ref_frames - correct_ref_frames
         ref_dif = ref_dif.abs().mean()
         assert ref_dif < 10**-12, f'pairs ref frames difference: {ref_dif}'
 
-        test_origins = torch.vstack([p.geom_params.origins[1].reshape(-1,3) for p in self.cgs.dna.pairs_list])
-        correct_origins = torch.vstack([p.geom_params.origins[1].reshape(-1,3) for p in self.correct_cgs.dna.pairs_list])
+        test_origins = torch.vstack([p.geom_params.origins[1].reshape(-1,3) for p in self.cgs.dna.pairs])
+        correct_origins = torch.vstack([p.geom_params.origins[1].reshape(-1,3) for p in self.correct_cgs.dna.pairs])
         ori_dif = test_origins - correct_origins
         ori_dif = ori_dif.abs().mean()
         assert ori_dif < 10**-12, f'pairs origins difference: {ori_dif}'

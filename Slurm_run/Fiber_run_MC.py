@@ -3,9 +3,14 @@ import argparse
 import torch
 import h5py
 import numpy as np
+import signal 
 
 import warnings
 warnings.filterwarnings('ignore')
+
+def signal_handler(signum, frame, file):
+    file.close()
+
 parser = argparse.ArgumentParser(description='Start fiber simulations')
 
 parser.add_argument('--h5file', action='store', dest='h5file',default=None,
@@ -25,6 +30,7 @@ cgs = pynamod.CG_Structure()
 file = h5py.File(args.h5file,'r')
 cgs.load_from_h5(file)
 cgs.dna.transfer_trajectory_to_h5(args.traj_file,'w',compression="gzip",dtype=np.float16)
+signal.signal(signal.SIGTERM,lambda signum, frame: signal_handler(signum, frame, file=cgs.dna.trajectory.file))
 
 en = pynamod.Energy()
 en.set_energy_matrices(cgs,ignore_neighbors=10)

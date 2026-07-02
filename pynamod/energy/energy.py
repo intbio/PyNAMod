@@ -10,7 +10,7 @@ class Energy:
     '''
     This class creates force matrices for a given CG structure and calculates its energy.
       '''
-    def __init__(self,K_free=1,K_elec=1,K_bend=1,KT=300*8.314,salt_c=150,water_epsr = 81,include_elst=True):
+    def __init__(self,K_free=1,K_elec=1,K_bend=1,KT=300*8.314,salt_c=150,water_epsr = 81,include_elst=True,multimodal=False):
 
         # Setting energy constants
         eps0 = 8.854
@@ -22,12 +22,12 @@ class Energy:
         na = 6.022
         kiloj_order = 3
 
-        self._elastic_e_calc = _Elastic_Energy_Calculator(K_bend * KT * 10**(-kiloj_order))
+        self._elastic_e_calc = _Elastic_Energy_Calculator(K_bend * KT * 10**(-kiloj_order),multimodal=multimodal)
 
         K_free = 0.001*KT/10**kiloj_order
         K_elec_order = q_order*2 - eps0_order - dist_unit_order
         K_elec = K_elec*(q**2)/(4*torch.pi*eps0*water_epsr*na)*10**(K_elec_order+na_order-kiloj_order)
-        k_deb=-1/30
+        k_deb = -1/30
         #k_deb_order = (q_order*2+eps0_order)/2 + dist_unit_order 
         #k_deb = -(((2*salt_c*na*q**2)/(eps0*water_epsr*KT))**0.5)*10**k_deb_order
         self._real_space_calc = _Real_Space_Energy_Calculator(K_free,K_elec,include_elst,k_deb)
@@ -62,7 +62,7 @@ class Energy:
         elif restraint_type == 'circular_with_elastic_restraint':
             self._get_circular_restraint('elastic',CG_structure, scaling_factor)
 
-    def to(self,device):
+    def to(self, device):
         self._elastic_e_calc.to(device)
         self._real_space_calc.to(device)
 
@@ -97,14 +97,13 @@ class Energy:
 
     def _get_circular_restraint(self,restraint_func,CG_structure,scaling_factor):
         if restraint_func == 'elastic':
-            #Might use incorrect pair
-            pairtype = CG_structure.dna.pairs_list[0].pair_name[0] + CG_structure.dna.pairs_list[-1].pair_name[1]
+            pairtype = CG_structure.dna.pairs[-1].lead_nucl.restype + CG_structure.dna.pairs[0].lead_nucl.restype
             AVERAGE,FORCE_CONST,DISP = get_consts_olson_98()
             target = torch.tensor(AVERAGE[pairtype])
             const = torch.tensor(FORCE_CONST[pairtype])
         elif restraint_func == 'linear':
             target = torch.tensor(3.4)
             const = torch.tensor(0.4)
-        dna_length = len(CG_structure.dna.pairs_list)
-        self.restraints += [Restraint(0, dna_length-1, scaling_factor, target, const, en_restr_func=restraint_func)]
+        dna_length = len(CG_structure.dna.pairs)
+        self.restraints += [Restraint(dna_length-1,0, scaling_factor, target, const, en_restr_func=restraint_func)]
         self._real_space_calc.update_matrices_for_restraints(dna_length)

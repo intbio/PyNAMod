@@ -77,17 +77,17 @@ class Base_Pair:
 
         else:
             lead_nucl_ind = storage_class.lead_nucl_inds[ind]
-            lag_nucl_ind = storage_class.lag_nucl_inds[ind]   
-        
+            lag_nucl_ind = storage_class.lag_nucl_inds[ind]
+
     def __lt__(self, other):
         return self.lead_nucl.__lt__(other.lead_nucl)
-    
+
     def __eq__(self,other):
         return self.storage_class == other.storage_class and self.ind == other.ind
-    
+
     def __repr__(self):
         return f'<Nucleotides pair with resids {self.lead_nucl.resid}, {self.lag_nucl.resid}, and segids {self.lead_nucl.segid}, {self.lag_nucl.segid}>'   
-    
+
     def get_pair_params(self):
         '''
         Sets geometrical parameters of the pair. If geometrical parameters are already stored new ones will be added as a new frame. Otherwise, Geometrical_Parameters object is created.
@@ -95,31 +95,30 @@ class Base_Pair:
         lead_nucl,lag_nucl = self.lead_nucl,self.lag_nucl
         ori = torch.vstack([lead_nucl.origin,lag_nucl.origin]).reshape(2,1,3)
         r_frames = torch.stack([lead_nucl.ref_frame,lag_nucl.ref_frame])
-        
+
         if self.geom_params:
             self.geom_params.get_new_params_set(ref_frames=r_frames,origins=ori)
         else:
             self.geom_params = Geometrical_Parameters(ref_frames = r_frames, origins = ori,
                                                   pair_params=True)            
 
-    
-    def copy(self,**kwards):
+    def copy(self, **kwards):
         new = Base_Pair(lead_nucl=self.lead_nucl.copy(), lag_nucl=self.lag_nucl.copy(),
                         dna_structure=self.dna_structure, geom_params=self.geom_params)
         new.update_references()
         for name,value in kwards.items():
             setattr(new,name,value)
         return new
-    
-    def set_params(self,value,sl,attr):
+
+    def set_params(self, value, sl, attr):
         getattr(self.geom_params,attr)[sl] = value
-        
-    def _setter(self,value,attr):
+
+    def _setter(self, value, attr):
         getattr(self.storage_class,self.storage_class.get_name(attr))[self.ind] = value
-        
-    def _getter(self,attr):
+
+    def _getter(self, attr):
         return getattr(self.storage_class,self.storage_class.get_name(attr))[self.ind]
-        
+
     def _set_property(attr):
         setter = lambda self,value: self._setter(value,attr=attr)
         getter = lambda self: self._getter(attr=attr)
@@ -128,12 +127,11 @@ class Base_Pair:
     lead_nucl_ind = _set_property('lead_nucl_ind')
     lag_nucl_ind = _set_property('lag_nucl_ind')
     geom_params = _set_property('geom_params')
-    
-        
+
     pair_params = property(fget=lambda self: self.geom_params.local_params[1],fset=lambda self,value: self.set_params(value,1,attr='local_params'))
     Rm = property(fget=lambda self: self.geom_params.Rm[0],fset=lambda self,value: self.set_params(value,0,attr='Rm'))
     om = property(fget=lambda self: self.geom_params.om[0],fset=lambda self,value: self.set_params(value,0,attr='om'))
-    
+
     @property
     def pair_name(self):
         if isinstance(self.lead_nucl.restype,bytes):
@@ -142,14 +140,15 @@ class Base_Pair:
         else:
             return ''.join(sorted((str(self.lead_nucl.restype), 
                                str(self.lag_nucl.restype)))).upper()
-    
+
     @property
     def lead_nucl(self):
         return self.storage_class.nucleotides_storage[self.lead_nucl_ind]
-    
+
     @property
     def lag_nucl(self):
         return self.storage_class.nucleotides_storage[self.lag_nucl_ind]
+
 
 def _get_nucl_in_pairs_ind(nucleotides_storage):
     '''
@@ -160,16 +159,16 @@ def _get_nucl_in_pairs_ind(nucleotides_storage):
                         for (resname1,resname2) in combinations(nucleotides_storage.restypes,2)]
     dist = pdist(nucleotides_storage.origins.reshape(-1,3))
     dist_check = dist < 4
-    
+
     check = [name_check and d_check for name_check,d_check in zip(pair_names_check,dist_check)]
-    
+
     rot_dif = [R.align_vectors(r1,r2)[0] for candidate,(r1,r2) in 
                 zip(check,combinations(nucleotides_storage.ref_frames,2)) if candidate]
     rot_dif = R.concatenate(rot_dif).as_euler('zyx', degrees=True)
     rot_dif[:,2] += (rot_dif[:,2] < 0) * 360
-    
+
     true_pairs = classifier.predict(np.hstack([rot_dif,dist[check].reshape(-1,1)])).astype(bool)
-    
+
     nucl_ind = [(i1,i2) for candidate,(i1,i2) in zip(check,combinations(range(len(nucleotides_storage)),2)) if candidate]
 
     lead_ind,lag_ind = [],[]
@@ -177,11 +176,11 @@ def _get_nucl_in_pairs_ind(nucleotides_storage):
         if true_pair:
             lead_ind.append(i[0])
             lag_ind.append(i[1])
-    
-    
-    return lead_ind,lag_ind
 
-def _fix_missing_pairs(dna_structure,pairs):
+    return lead_ind, lag_ind
+
+
+def _fix_missing_pairs(dna_structure, pairs):
     '''
     Adds missing pairs by context after classifier algorithm.
     Fixes the cases
@@ -197,9 +196,9 @@ def _fix_missing_pairs(dna_structure,pairs):
 
         if nucleotide.ind not in paired_nucl_ind and nucleotide.leading_strand:
             next_nucleotide = nucleotide.next_nucleotide
-            
+
             prev_nucleotide = nucleotide.previous_nucleotide
-    
+
             if next_nucleotide and prev_nucleotide and prev_nucleotide.ind in paired_nucl_ind and next_nucleotide.ind in paired_nucl_ind:
                 if prev_nucleotide.ind in pairs.lead_nucl_inds and next_nucleotide.ind in pairs.lead_nucl_inds:
                     prev_pair_ind = pairs.lead_nucl_inds.index(prev_nucleotide.ind)
@@ -221,33 +220,33 @@ def _fix_missing_pairs(dna_structure,pairs):
                                 new_base_pair.get_pair_params()
 
     return pairs.sort()
-    
+
+
 def get_pairs(dna_structure):
     '''
     Runs the analysis to determine all pairs of nucleotides for a given structure.
-    
+
     Attributes:
-    
+
     **dna_structure** - DNA_Structure object to analyze.
-    
+
     Returns:
-    
+
     Sorted Pairs_Storage objects.
     '''
     nucleotides = dna_structure.nucleotides
-    lead_ind,lag_ind = _get_nucl_in_pairs_ind(nucleotides)
-    
-    
+    lead_ind, lag_ind = _get_nucl_in_pairs_ind(nucleotides)
+
     geom_params = []
 
-    for ldi,lgi in zip(lead_ind,lag_ind):
+    for ldi, lgi in zip(lead_ind, lag_ind):
         ori = torch.vstack([nucleotides.origins[lgi],nucleotides.origins[ldi]]).reshape(2,1,3)
         r_frames = torch.stack([nucleotides.ref_frames[lgi],nucleotides.ref_frames[ldi]])
         geom_params.append(Geometrical_Parameters(ref_frames = r_frames, origins = ori,
                                                   pair_params=True))
 
-    pairs = Pairs_Storage(Base_Pair,nucleotides,lead_ind,lag_ind,geom_params)
+    pairs = Pairs_Storage(Base_Pair, nucleotides, lead_ind, lag_ind, geom_params)
 
-    pairs = _fix_missing_pairs(dna_structure,pairs)
+    pairs = _fix_missing_pairs(dna_structure, pairs)
 
     return pairs
