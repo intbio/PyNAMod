@@ -1,8 +1,11 @@
 import unittest
 import h5py
+import numpy as np
 import torch
 
 import pynamod
+
+from pynamod.atomic_analysis.pairs_parser import _OnnxPairClassifier
 
 
 class Test_Runner(unittest.TestCase):
@@ -84,6 +87,46 @@ class Test_Runner(unittest.TestCase):
 
     def test_MC_run(self):
         pass
+
+
+class _FakeSession:
+    def __init__(self, outputs):
+        self.outputs = outputs
+
+    def run(self, output_names, _inputs):
+        return [self.outputs[name] for name in output_names]
+
+
+class Test_OnnxPairClassifier(unittest.TestCase):
+    def test_predict_prefers_probabilities_over_label(self):
+        clf = _OnnxPairClassifier.__new__(_OnnxPairClassifier)
+        setattr(clf, '_sess', _FakeSession({
+            'probabilities': np.array([
+                [-0.15, 0.15],
+                [0.40, 0.60],
+            ], dtype=np.float32),
+            'label': np.array([1, 1], dtype=np.int64),
+        }))
+        clf._iname = 'float_input'
+        clf._prob_name = 'probabilities'
+        clf._label_name = 'label'
+
+        pred = clf.predict(np.zeros((2, 4), dtype=np.float32))
+
+        np.testing.assert_array_equal(pred, np.array([False, True]))
+
+    def test_predict_falls_back_to_label_output(self):
+        clf = _OnnxPairClassifier.__new__(_OnnxPairClassifier)
+        setattr(clf, '_sess', _FakeSession({
+            'label': np.array([0, 1], dtype=np.int64),
+        }))
+        clf._iname = 'float_input'
+        clf._prob_name = None
+        clf._label_name = 'label'
+
+        pred = clf.predict(np.zeros((2, 4), dtype=np.float32))
+
+        np.testing.assert_array_equal(pred, np.array([False, True]))
 
 
 if __name__ == "__main__":
