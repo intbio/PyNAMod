@@ -17,6 +17,7 @@ class Nucleotide_Creator:
                 rlspg = Real_Space_Beads_Groups(2)
                 path = files('pynamod').joinpath(f'structures/ref_cg_pairs/1spn/{name}.h5')
                 rlspg.load_from_h5(h5py.File(path, 'r')['rlspg_0_CG_parameters'])
+                rlspg.group_type = 'DNA Pair'
                 self.ref_rlsps[name] = rlspg
 
         elif model_type == '3spn_from_atomic':
@@ -42,6 +43,7 @@ class Nucleotide_Creator:
                 rlspg = Real_Space_Beads_Groups(6)
                 path = files('pynamod').joinpath(f'structures/ref_cg_pairs/3spn/{name}.h5')
                 rlspg.load_from_h5(h5py.File(path, 'r')['rlspg_0_CG_parameters'])
+                rlspg.group_type = 'DNA Pair'
                 self.ref_rlsps[name] = rlspg
 
         elif model_type == '1spbp_from_atomic' or model_type == '1spbp_generated':

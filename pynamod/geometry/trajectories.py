@@ -14,12 +14,12 @@ class Trajectory(ABC):
         self.traj_step = 1
 
     def __iter__(self):
-        self.cur_step = 0
-        for i in range(len(self)):
-            if self.cur_step > len(self) - 1:
+        for i in range(0,len(self),self.traj_step):
+                
+            self.cur_step = i
+            if self.origins.sum() == 0:
                 break
             yield self.cur_step
-            self.cur_step += self.traj_step
 
         self.cur_step = 0
 
@@ -170,17 +170,18 @@ class H5_Trajectory(Trajectory):
             self.total_len = 0
 
         elif mode == 'r':
-            self.total_len = len(self.file)
+            self.chunk_size = self._get_group(0)['origins'].shape[0]
+            self.total_len = len(self.file.keys())*self.chunk_size
 
         elif mode in ('r+', 'a'):
             self.total_len = len(self.file)
             self.cur_step = self.total_len - 1
-
         if len(self) != 0:
             for k in self._get_group(0).keys():
                 if k not in self.attrs_names:
                     self.attrs_names += [str(k)]
-                    self.shapes += self._get_group(0)[str(k)][:].shape
+                    self.shapes += self._get_group(0)[str(k)].shape
+
 
     def _create_attr_trajectory(self, attr, shape):
         for i in range(len(self)//self.chunk_size):
@@ -260,7 +261,7 @@ class H5_Trajectory(Trajectory):
         if frame is None:
             frame = self.cur_step
         if frame >= len(self):
-            self._create_frame(frame)
+            self._create_frames()
         chunk, chunk_step = self._get_chunk_indices(frame)
         self._get_group(chunk)[attr][chunk_step] = value
 

@@ -219,6 +219,7 @@ class CG_Structure:
         u.add_TopologyAttr('segid', segid_names)
         u.add_TopologyAttr('charge', self.charges)
         u.add_TopologyAttr('radius', self.radii)
+        u.add_TopologyAttr('mass', self.masses)
         u.load_new(coords, format=MemoryReader)
         alignment = align.AlignTraj(u, u,in_memory=True, select=allign_sel)
         alignment.run()

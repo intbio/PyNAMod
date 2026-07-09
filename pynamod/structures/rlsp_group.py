@@ -1,5 +1,6 @@
 import MDAnalysis as mda
 import numpy as np
+import h5py
 import torch
 import subprocess
 import tempfile
@@ -7,14 +8,13 @@ from sklearn.neighbors import KNeighborsClassifier
 
 
 def load_rlspg_from_h5(h5_dataset):
-    if 'group_type' in h5_dataset.keys():
-        group_type = str(h5_dataset['group_type'])
-    else:
+    if 'group_type' not in h5_dataset.keys():
         if h5_dataset['supdata'][0] > 6:
             group_type = 'Protein'
         else:
             group_type = 'DNA Pair'
-
+    else:
+        group_type = h5_dataset['group_type'].asstr()[()]
     if group_type == 'Protein':
         rlspg = Protein()
     else:
@@ -51,13 +51,15 @@ class Real_Space_Beads_Groups:
         group.create_dataset('eps', data=self.eps, **dataset_kwards)
         group.create_dataset('masses',data=self.masses, **dataset_kwards)
         group.create_dataset('supdata', data=[self.n_cg_beads, self.ref_ind, self.binded_dna_len], **dataset_kwards)
-        group.create_dataset('group_type', data=self.group_type, **dataset_kwards)
+        dt = h5py.string_dtype(encoding="utf-8")
+        group.create_dataset('group_type', data=self.group_type,dtype=dt, **dataset_kwards)
 
     def load_from_h5(self, h5_dataset ,group_type=None):
+
         if group_type is not None:
             self.group_type = group_type
         else:
-            self.group_type = str(h5_dataset['group_type'])
+            self.group_type = h5_dataset['group_type'].asstr()[()]
         self.ref_vectors = torch.from_numpy(h5_dataset['ref_vectors'][:]).to(torch.double)
         self.charges = torch.from_numpy(h5_dataset['charges'][:])
         self.radii = torch.from_numpy(h5_dataset['radii'][:])
